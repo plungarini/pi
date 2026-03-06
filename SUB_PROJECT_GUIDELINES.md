@@ -21,6 +21,7 @@ Every sub-project must include an onboarding script (e.g., `scripts/onboard.js`)
   - Automatically extract tokens/cookies if possible (e.g., using Puppeteer for web scraping login sessions).
   - Handle interruption (`SIGINT` or `Ctrl+C`) gracefully by saving existing progress to the `.env` file before exiting.
   - Read existing `.env` values and use them as default prompts.
+  - Start tests right after onboarding is completed.
 
 ## 3. Global Logging Integration (`logger-pi`)
 
@@ -45,7 +46,19 @@ Long-running services must handle termination signals (`SIGINT`, `SIGTERM`) prop
 
 ## 5. Testing & Quality Best Practices
 
-- **Testing**: Include integration and unit tests using `vitest`.
+- **Testing**: Include integration and unit tests using `vitest`. Tests should also be run automatically after onboarding is completed and test both functionality and any env variable validation (Auth of external APIs if present).
 - **TypeScript**: Follow modern ESM standards (`"moduleResolution": "NodeNext"`, `"target": "ES2022"` or higher).
 - **Environment Setup**: Keep a well-documented `.env.example` file in the project root. The actual `.env` file should be heavily gitignored.
 - **Dependencies**: Keep dependencies lightweight and prefer native Node functionality (like native `fetch`) where possible to reduce bloat.
+
+## 6. Project Organization
+
+To maintain consistency across microservices, follow this standardized directory structure for the `src/` folder:
+
+- **`src/core/`**: Fundamental infrastructure and shared modules (e.g., database, logger, external client wrappers).
+- **`src/services/`**: Pure business logic and data processing handlers. Avoid framework-specific code (like Fastify types) here.
+- **`src/api/`**: Public interface, including server setup and routes.
+  - `src/api/routes/`: Route definitions and request/response handling.
+- **`src/types/`**: Shared TypeScript interfaces and types.
+- **`src/tests/`**: All unit and integration tests.
+- **`src/index.ts`**: The main entry point of the application.
