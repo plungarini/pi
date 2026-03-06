@@ -1,0 +1,9 @@
+[submodule "reddit-pi"]
+	path = reddit-pi
+	url = git@github.com:plungarini/reddit-pi.git
+[submodule "logger-pi"]
+	path = logger-pi
+	url = git@github.com:plungarini/logger-pi.git
+[submodule "whatsapp-pi"]
+	path = whatsapp-pi
+	url = git@github.com:plungarini/whatsapp-pi.git
