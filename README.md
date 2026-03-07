@@ -20,6 +20,21 @@ If you already ran a normal `git clone` and your submodule folders are empty, yo
 git submodule update --init --recursive
 ```
 
+## Automation Scripts
+
+The root repository provides automation scripts to manage the project ecosystem:
+
+- **`npm run build-update`**: A **developer-only** script that automates the release process. It triggers `git flow release` across all submodules, bumps versions, merges to master/develop, and pushes changes with tags.
+- **`npm run update`**: The standard **production** update script. It fetches the latest code from `origin/master`, synchronizes all submodules, handles dependency installation (`npm install`), and rebuilds services to ensure a clean, up-to-date state.
+
+## Module Documentation
+
+Each service in this repository is independent and contains its own detailed documentation:
+
+- [logger-pi](./logger-pi/README.md): Central logging and ingestion.
+- [reddit-pi](./reddit-pi/README.md): Intelligent Reddit recommendation engine.
+- [whatsapp-pi](./whatsapp-pi/README.md): WhatsApp API bridge and notification service.
+
 ## Running the Services
 
 Each submodule is a fully independent microservice. General best practice is to navigate into each specific folder you wish to run, install its dependencies, and start the service:
