@@ -12,11 +12,12 @@ function runInherit(cmd, cwd = process.cwd()) {
 	execSync(cmd, { cwd, stdio: 'inherit' });
 }
 
-function getNewVersion(packageJsonPath) {
+function getNextMinorVersion(packageJsonPath) {
 	const content = fs.readFileSync(packageJsonPath, 'utf8');
 	const pkg = JSON.parse(content);
 	const versionParts = pkg.version.split('.').map(Number);
-	versionParts[2] += 1;
+	versionParts[1] += 1;
+	versionParts[2] = 0;
 	return versionParts.join('.');
 }
 
@@ -72,7 +73,7 @@ async function buildUpdate() {
 			runInherit('git flow init -d', subPath);
 		}
 
-		const newVersion = getNewVersion(pkgPath);
+		const newVersion = getNextMinorVersion(pkgPath);
 		console.log(`New version will be ${newVersion} for ${sub}`);
 
 		// Start release BEFORE changing files
@@ -114,7 +115,6 @@ async function buildUpdate() {
 	}
 
 	// Commit any updates (submodule pointers, .gitignore, etc) to develop BEFORE starting the release
-	// This ensures a clean state for git flow
 	runInherit('git add .', rootDir);
 	try {
 		runInherit('git commit -m "chore: sync submodules and updates before release"', rootDir);
@@ -123,7 +123,7 @@ async function buildUpdate() {
 	}
 
 	const rootPkgPath = path.join(rootDir, 'package.json');
-	const newRootVersion = getNewVersion(rootPkgPath);
+	const newRootVersion = getNextMinorVersion(rootPkgPath);
 	console.log(`New root version will be ${newRootVersion}`);
 
 	runInherit(`git flow release start ${newRootVersion}`, rootDir);
