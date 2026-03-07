@@ -50,6 +50,8 @@ async function buildUpdate() {
 
 	console.log(`Found ${submodules.length} submodules: ${submodules.join(', ')}`);
 
+	let atLeastOneSubmoduleBumped = false;
+
 	// Update submodules first
 	for (const sub of submodules) {
 		const subPath = path.resolve(rootDir, sub);
@@ -71,6 +73,12 @@ async function buildUpdate() {
 		} catch (e) {
 			console.log(`Initializing git flow for ${sub}...`);
 			runInherit('git flow init -d', subPath);
+		}
+
+		const changeCount = Number.parseInt(run('git rev-list master..develop --count', subPath), 10);
+		if (changeCount === 0) {
+			console.log(`No changes detected in ${sub} (develop is not ahead of master). Skipping.`);
+			continue;
 		}
 
 		const newVersion = getNextMinorVersion(pkgPath);
@@ -100,6 +108,7 @@ async function buildUpdate() {
 		runInherit('git push origin develop', subPath);
 		runInherit('git push origin master', subPath);
 		runInherit('git push --tags', subPath);
+		atLeastOneSubmoduleBumped = true;
 	}
 
 	// Update main repository
@@ -123,6 +132,12 @@ async function buildUpdate() {
 	}
 
 	const rootPkgPath = path.join(rootDir, 'package.json');
+	// Root release happens even if no changes were detected (as per user request)
+	const hasCodeChanges = run('git rev-list master..develop --count', rootDir) !== '0';
+	if (!hasCodeChanges && !atLeastOneSubmoduleBumped) {
+		console.log('\nNote: No new changes or bumped submodules detected, but proceeding with root release as requested.');
+	}
+
 	const newRootVersion = getNextMinorVersion(rootPkgPath);
 	console.log(`New root version will be ${newRootVersion}`);
 
@@ -150,7 +165,9 @@ async function buildUpdate() {
 	console.log(`\nAll done! Released version ${newRootVersion} across all modules.`);
 }
 
-buildUpdate().catch((err) => {
+try {
+	await buildUpdate();
+} catch (err) {
 	console.error('Build-update failed:', err.message);
 	process.exit(1);
-});
+}
