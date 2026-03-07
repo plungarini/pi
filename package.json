@@ -1,10 +1,10 @@
 {
-	"name": "pi",
-	"version": "1.0.0",
-	"description": "Pi main configuration and scripts",
-	"scripts": {
-		"build-update": "node scripts/build-update.js",
-		"update": "node scripts/update.js"
-	},
-	"type": "module"
+  "name": "pi",
+  "version": "1.0.1",
+  "description": "Pi main configuration and scripts",
+  "scripts": {
+    "build-update": "node scripts/build-update.js",
+    "update": "node scripts/update.js"
+  },
+  "type": "module"
 }
