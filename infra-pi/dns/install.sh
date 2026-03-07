@@ -51,13 +51,10 @@ if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
 fi
 
 sudo mkdir -p /etc/dnsmasq.d
-sudo cp "$SCRIPT_DIR/dnsmasq.conf" /etc/dnsmasq.d/pi-local.conf
 sudo systemctl enable dnsmasq
-sudo systemctl restart dnsmasq
-echo "dnsmasq configured and running"
 echo ""
 
-echo "Configuring Caddy..."
+echo "Configuring Caddy + dnsmasq..."
 sudo mkdir -p /etc/caddy
 bash "$SCRIPT_DIR/apply.sh"
 sudo systemctl enable caddy
