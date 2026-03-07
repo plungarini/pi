@@ -44,6 +44,71 @@ function readSubmodules() {
 	return submodules;
 }
 
+function processSubmodule(rootDir, sub) {
+	const subPath = path.resolve(rootDir, sub);
+	console.log(`\n--- Processing Submodule: ${sub} ---`);
+
+	// Ensure we're on develop and up-to-date
+	runInherit('git checkout develop', subPath);
+	runInherit('git pull origin develop', subPath);
+	runInherit('git fetch origin master:master', subPath);
+
+	const pkgPath = path.join(subPath, 'package.json');
+	if (!fs.existsSync(pkgPath)) {
+		console.warn(`No package.json found in ${subPath}, skipping.`);
+		return false;
+	}
+
+	// Check if git flow is initialized
+	try {
+		run('git config --get gitflow.branch.master', subPath);
+	} catch (e) {
+		console.log(`Initializing git flow for ${sub}...`);
+		runInherit('git flow init -d', subPath);
+	}
+
+	let hasChanges = false;
+	try {
+		run('git diff master..develop --quiet', subPath);
+	} catch (e) {
+		hasChanges = true;
+	}
+
+	if (!hasChanges) {
+		console.log(`No code changes detected in ${sub} (master and develop are identical). Skipping.`);
+		return false;
+	}
+
+	const newVersion = getNextMinorVersion(pkgPath);
+	console.log(`New version will be ${newVersion} for ${sub}`);
+
+	// Start release BEFORE changing files
+	runInherit(`git flow release start ${newVersion}`, subPath);
+
+	// Now bump and commit
+	writeVersion(pkgPath, newVersion);
+	runInherit(`git add package.json`, subPath);
+	runInherit(`git commit -m "Bump version to ${newVersion}"`, subPath);
+
+	// Finish release
+	try {
+		execSync(`git flow release finish -m "Release ${newVersion}" ${newVersion}`, {
+			cwd: subPath,
+			env: { ...process.env, GIT_MERGE_AUTOEDIT: 'no', GIT_EDITOR: 'true' },
+			stdio: 'inherit',
+		});
+	} catch (e) {
+		console.error(`Failed to finish release ${newVersion} for ${sub}.`);
+		process.exit(1);
+	}
+
+	// Push
+	runInherit('git push origin develop', subPath);
+	runInherit('git push origin master', subPath);
+	runInherit('git push --tags', subPath);
+	return true;
+}
+
 async function buildUpdate() {
 	const rootDir = process.cwd();
 	const submodules = readSubmodules();
@@ -54,61 +119,9 @@ async function buildUpdate() {
 
 	// Update submodules first
 	for (const sub of submodules) {
-		const subPath = path.resolve(rootDir, sub);
-		console.log(`\n--- Processing Submodule: ${sub} ---`);
-
-		// Ensure we're on develop and up-to-date
-		runInherit('git checkout develop', subPath);
-		runInherit('git pull origin develop', subPath);
-
-		const pkgPath = path.join(subPath, 'package.json');
-		if (!fs.existsSync(pkgPath)) {
-			console.warn(`No package.json found in ${subPath}, skipping.`);
-			continue;
+		if (processSubmodule(rootDir, sub)) {
+			atLeastOneSubmoduleBumped = true;
 		}
-
-		// Check if git flow is initialized
-		try {
-			run('git config --get gitflow.branch.master', subPath);
-		} catch (e) {
-			console.log(`Initializing git flow for ${sub}...`);
-			runInherit('git flow init -d', subPath);
-		}
-
-		const changeCount = Number.parseInt(run('git rev-list master..develop --count', subPath), 10);
-		if (changeCount === 0) {
-			console.log(`No changes detected in ${sub} (develop is not ahead of master). Skipping.`);
-			continue;
-		}
-
-		const newVersion = getNextMinorVersion(pkgPath);
-		console.log(`New version will be ${newVersion} for ${sub}`);
-
-		// Start release BEFORE changing files
-		runInherit(`git flow release start ${newVersion}`, subPath);
-
-		// Now bump and commit
-		writeVersion(pkgPath, newVersion);
-		runInherit(`git add package.json`, subPath);
-		runInherit(`git commit -m "Bump version to ${newVersion}"`, subPath);
-
-		// Finish release
-		try {
-			execSync(`git flow release finish -m "Release ${newVersion}" ${newVersion}`, {
-				cwd: subPath,
-				env: { ...process.env, GIT_MERGE_AUTOEDIT: 'no', GIT_EDITOR: 'true' },
-				stdio: 'inherit',
-			});
-		} catch (e) {
-			console.error(`Failed to finish release ${newVersion} for ${sub}.`);
-			process.exit(1);
-		}
-
-		// Push
-		runInherit('git push origin develop', subPath);
-		runInherit('git push origin master', subPath);
-		runInherit('git push --tags', subPath);
-		atLeastOneSubmoduleBumped = true;
 	}
 
 	// Update main repository
@@ -132,8 +145,15 @@ async function buildUpdate() {
 	}
 
 	const rootPkgPath = path.join(rootDir, 'package.json');
+
 	// Root release happens even if no changes were detected (as per user request)
-	const hasCodeChanges = run('git rev-list master..develop --count', rootDir) !== '0';
+	let hasCodeChanges = false;
+	try {
+		run('git diff master..develop --quiet', rootDir);
+	} catch (e) {
+		hasCodeChanges = true;
+	}
+
 	if (!hasCodeChanges && !atLeastOneSubmoduleBumped) {
 		console.log('\nNote: No new changes or bumped submodules detected, but proceeding with root release as requested.');
 	}
