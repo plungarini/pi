@@ -1,6 +1,6 @@
 {
   "name": "pi",
-  "version": "1.30.0",
+  "version": "1.31.0",
   "description": "Pi main configuration and scripts",
   "scripts": {
     "build-update": "node scripts/build-update.js",
