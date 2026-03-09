@@ -60,6 +60,7 @@ async function update() {
 
 		// Attempt to sync submodules just in case
 		console.log('Syncing submodules...');
+		runInherit('git submodule sync --recursive');
 		runInherit('git submodule update --init --recursive --force');
 		return;
 	}
