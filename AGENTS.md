@@ -10,6 +10,7 @@ The Pi Projects is a monorepo-organized collection of independent microservices 
 - **Reddit Intelligence** (`reddit-pi`): Recommendation engine with AI-powered content scoring
 - **WhatsApp Bridge** (`whatsapp-pi`): WhatsApp API for programmatic messaging
 - **Vector Memory** (`memory-pi`): Semantic memory storage using vector embeddings
+- **Medical AI Assistant** (`medical-pi`): MedGemma-powered medical chat with breathing profile
 - **Infrastructure** (`infra-pi`): DNS and reverse proxy configuration for local network access
 
 The repository uses **Git Submodules** for independent service development with shared release management.
@@ -31,7 +32,8 @@ pi/
 ├── logger-pi/               # Central logging service (port 4000)
 ├── reddit-pi/               # Reddit recommendation engine (port 3000)
 ├── whatsapp-pi/             # WhatsApp API bridge (port 3001)
-└── memory-pi/               # Vector memory microservice (port 3002)
+├── memory-pi/               # Vector memory microservice (port 3002)
+└── medical-pi/              # Medical AI assistant (port 3003)
 ```
 
 Each submodule is an independent Git repository linked via submodules.
@@ -73,6 +75,14 @@ Each submodule is an independent Git repository linked via submodules.
 - **OpenRouter**: LLM for multimodal distillation (Gemini 2.0)
 - **Zod**: Schema validation
 - **React + Vite**: Admin UI with glassmorphic design
+
+**medical-pi**:
+- **MedGemma 4B via Modal**: Primary medical inference model
+- **OpenRouter**: Utility LLM for profile extraction and titles
+- **Meilisearch**: Full-text search for messages and documents
+- **better-sqlite3**: Medical profile and conversation storage
+- **React + Vite + TailwindCSS**: Chat UI with streaming messages
+- **Zod**: Profile diff validation
 
 ## Build and Development Commands
 
@@ -130,6 +140,7 @@ npm run typecheck
 2. `memory-pi` (port 3002) - If using semantic memory features
 3. `whatsapp-pi` (port 3001) - If using WhatsApp notifications
 4. `reddit-pi` (port 3000) - Depends on logger and optionally WhatsApp
+5. `medical-pi` (port 3003) - Depends on logger, optionally memory-pi and whatsapp-pi
 
 ## Code Organization
 
@@ -239,6 +250,7 @@ process.on('SIGTERM', shutdown);
 Services are accessible via friendly `.pi` domains on the local network:
 - `http://reddit.pi` → port 3000
 - `http://memory.pi` → port 3002
+- `http://medical.pi` → port 3003
 
 **Components**:
 - **dnsmasq**: DNS server resolving `.pi` domains
@@ -261,13 +273,16 @@ chmod +x install.sh apply.sh
 └─────────────┘
        ▲
        │
-┌──────┴──────┬─────────────┬─────────────┐
-│  reddit-pi  │ whatsapp-pi │  memory-pi  │
-│   :3000     │   :3001     │   :3002     │
-└─────────────┴─────────────┴─────────────┘
-       │              │
-       └──────────────┘
-       (reddit-pi can notify via WhatsApp)
+┌──────┴──────┬─────────────┬─────────────┬─────────────┐
+│  reddit-pi  │ whatsapp-pi │  memory-pi  │ medical-pi  │
+│   :3000     │   :3001     │   :3002     │   :3003     │
+└─────────────┴─────────────┴─────────────┴─────────────┘
+       │              │                       │
+       └──────────────┘                       │
+       (reddit-pi can notify via WhatsApp)   │
+                                              │
+       (medical-pi can notify via WhatsApp)──┘
+       (medical-pi can search memory-pi)
 ```
 
 ## Security Considerations
