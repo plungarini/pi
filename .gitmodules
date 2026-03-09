@@ -10,3 +10,6 @@
 [submodule "memory-pi"]
 	path = memory-pi
 	url = git@github.com:plungarini/memory-pi.git
+[submodule "medical-pi"]
+	path = medical-pi
+	url = git@github.com:plungarini/medical-pi.git
