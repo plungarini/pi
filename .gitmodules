@@ -7,3 +7,6 @@
 [submodule "whatsapp-pi"]
 	path = whatsapp-pi
 	url = git@github.com:plungarini/whatsapp-pi.git
+[submodule "memory-pi"]
+	path = memory-pi
+	url = ./memory-pi
