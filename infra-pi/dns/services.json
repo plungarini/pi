@@ -5,6 +5,11 @@
 			"domain": "reddit.pi",
 			"note": "Reddit recommendation engine",
 			"port": 3000
+		},
+		{
+			"domain": "memory.pi",
+			"note": "Smart multimodal memory service (RAG)",
+			"port": 3002
 		}
 	]
 }
