@@ -184,14 +184,16 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 All microservices in the Pi ecosystem run on Raspberry Pi (ARM64/Linux). To ensure smooth deployment and operation:
 
 ### 5.1 Runtime Requirements
-| Requirement | Description |
-|-------------|-------------|
-| **Node.js Only** | Use TypeScript/JavaScript exclusively. Avoid Python, Go, Rust, or other runtimes |
-| **No Docker** | Services must run directly on the host system |
+
+| Requirement            | Description                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------- |
+| **Node.js Only**       | Use TypeScript/JavaScript exclusively. Avoid Python, Go, Rust, or other runtimes               |
+| **No Docker**          | Services must run directly on the host system                                                  |
 | **No External Config** | No manual OS-level configuration, systemd units (except Meilisearch), or external dependencies |
-| **Self-Contained** | Everything needed must be installed via `npm install` or the onboarding script |
+| **Self-Contained**     | Everything needed must be installed via `npm install` or the onboarding script                 |
 
 ### 5.2 One-Step Setup Principle
+
 A new user should only need these commands:
 
 ```bash
@@ -202,11 +204,13 @@ npm start            # Start the service
 ```
 
 **No additional steps allowed.** If something requires installation (like Meilisearch), the onboarding script must:
+
 - Detect if it's missing
 - Download/install it automatically
 - Configure it without user intervention
 
 ### 5.3 Avoiding Python
+
 - **Preferred**: Use Node.js libraries for everything (SQLite, HTTP, file operations, etc.)
 - **If Python Required**: The onboarding script must:
   - Detect Python installation
@@ -216,12 +220,14 @@ npm start            # Start the service
 - **Example**: If using Python for ML inference, the onboarding script should handle `python -m venv venv && pip install -r requirements.txt`
 
 ### 5.4 File System Considerations
+
 - Use relative paths or configurable `BASE_STORAGE_PATH`
 - Default data directory: `/data/<project-name>` (configurable via `.env`)
 - Create directories automatically on startup if they don't exist
 - Handle permission errors gracefully
 
 ### 5.5 ARM64 Compatibility
+
 - Prefer pure-JavaScript npm packages over native bindings
 - If native bindings required (like `better-sqlite3`), ensure they provide ARM64 binaries
 - Test on Raspberry Pi or use `npm install` in CI to verify ARM64 builds
@@ -240,7 +246,7 @@ npm start            # Start the service
   - Route tests for API endpoints
 - **Automation**: Tests run automatically after onboarding completes
 
-### 5.2 TypeScript Configuration
+### 6.2 TypeScript Configuration
 
 ```json
 {
@@ -254,53 +260,19 @@ npm start            # Start the service
 }
 ```
 
-### 5.3 Dependencies
+### 6.3 Dependencies
 
 - Prefer native Node.js APIs (native `fetch`, `fs`, etc.)
 - Keep dependencies lightweight for Pi compatibility
 - Pin major versions to avoid breaking changes
 
-### 5.4 Environment Files
+### 6.4 Environment Files
 
 - `.env.example`: Template with ALL required variables (committed)
 - `.env`: Actual configuration (gitignored, never committed)
 - Both files must include comments explaining each variable
 
----
-
-## 7. Project Organization
-
-### 6.1 Directory Structure
-
-```
-<project-name>/
-├── src/
-│   ├── core/              # Infrastructure & shared modules
-│   │   ├── db.ts          # Database client
-│   │   ├── logger.ts      # logger-pi integration
-│   │   └── *.ts           # External API clients
-│   ├── services/          # Business logic (pure functions)
-│   │   └── *.service.ts   # Domain-specific services
-│   ├── api/
-│   │   ├── routes/        # Route definitions
-│   │   │   └── *.ts       # One file per resource
-│   │   └── server.ts      # Fastify server setup
-│   ├── types/
-│   │   └── index.ts       # Shared TypeScript interfaces
-│   ├── tests/
-│   │   └── *.test.ts      # Vitest test files
-│   └── index.ts           # Application entry point
-├── ui/                    # React frontend (if applicable)
-├── scripts/
-│   └── onboard.js         # Interactive setup script
-├── prompts/               # LLM prompts (if using AI)
-├── .env.example
-├── package.json
-├── tsconfig.json
-└── README.md
-```
-
-### 6.2 Naming Conventions
+### 6.5 Naming Conventions
 
 - Files: kebab-case (e.g., `chat-service.ts`)
 - Classes: PascalCase (e.g., `ChatService`)
@@ -309,7 +281,7 @@ npm start            # Start the service
 
 ---
 
-## 8. Main Repository Updates
+## 7. Main Repository Updates
 
 After creating a new sub-project, you **MUST** update the following files in the **main** `pi` repository:
 
@@ -335,8 +307,6 @@ Each service in this repository is independent and contains its own detailed doc
 
 - [logger-pi](./logger-pi/README.md): Central logging and ingestion.
 - [reddit-pi](./reddit-pi/README.md): Intelligent Reddit recommendation engine.
-- [whatsapp-pi](./whatsapp-pi/README.md): WhatsApp API bridge and notification service.
-- [memory-pi](./memory-pi/README.md): Semantic memory storage using vector embeddings.
 - [<project-name>](./<project-name>/README.md): <One-line description of what it does>.
 ```
 
@@ -381,17 +351,20 @@ If the microservice needs to be accessible via a friendly `.pi` domain, add an e
 Before considering a new sub-project complete, verify:
 
 ### Git & Repository Setup (§1, §10)
+
 - [ ] Git repository initialized with `git flow init -d`
 - [ ] `master` and `develop` branches pushed to GitHub
 - [ ] Added as submodule to main pi repo using SSH URL (`git@github.com:...`)
 
 ### Core Implementation (§2, §3, §4)
+
 - [ ] `scripts/onboard.js` implemented and tested - **only `npm install`, `npm run onboard`, `npm start` needed**
 - [ ] `src/logger.ts` implemented for logger-pi integration
 - [ ] Graceful shutdown handlers for SIGINT/SIGTERM
 - [ ] Onboarding handles all setup automatically (no manual steps)
 
 ### Pi/Linux Compatibility (§5)
+
 - [ ] **No Python** - pure Node.js implementation preferred
 - [ ] **No Docker** - runs directly on Raspberry Pi
 - [ ] **No external dependencies** - everything via npm or automated onboarding
@@ -400,150 +373,16 @@ Before considering a new sub-project complete, verify:
 - [ ] Directories created automatically on startup
 
 ### Quality & Testing (§6)
+
 - [ ] Vitest tests in `src/tests/`
 - [ ] Tests run automatically after onboarding
 - [ ] TypeScript configured with ES2022/NodeNext
 
 ### Documentation & Configuration (§7, §8)
+
 - [ ] `.env.example` with ALL required variables documented
 - [ ] `package.json` with proper scripts (build, dev, start, test, onboard)
 - [ ] README.md with setup and usage instructions
 - [ ] AGENTS.md updated with service details
 - [ ] README.md (main repo) updated with Module Documentation link
 - [ ] infra-pi/dns/services.json updated (if service exposed via DNS)
-
----
-
-## 10. Git Flow Workflow Examples
-
-### 10.1 Creating a New Service (Complete Workflow)
-
-Creating a new service called `analytics-pi`:
-
-```bash
-# === STEP 1: Create and Initialize Service ===
-cd /path/to/pi
-mkdir analytics-pi
-cd analytics-pi
-
-# Initialize git and git flow
-git init
-git flow init -d
-
-# Verify branches
-git branch -a
-# * develop
-#   master
-
-# === STEP 2: Create Project Structure ===
-mkdir -p src/{core,services,api/routes,types,tests}
-mkdir -p scripts ui/src
-
-# Create initial files (package.json, tsconfig.json, etc.)
-# ... implement your service ...
-
-# === STEP 3: Initial Commit ===
-git add -A
-git commit -m "Initial commit: analytics-pi v1.0.0"
-
-# === STEP 4: Create GitHub Repository ===
-gh repo create plungarini/analytics-pi --public --source=. --remote=origin --push
-
-# Or manually:
-# git remote add origin git@github.com:plungarini/analytics-pi.git
-# git push -u origin master
-# git push -u origin develop
-
-# === STEP 5: Add as Submodule (from root) ===
-cd /path/to/pi
-git submodule add git@github.com:plungarini/analytics-pi.git analytics-pi
-
-# === STEP 6: Update Main Repo Documentation ===
-# - Edit AGENTS.md (add service to all relevant sections)
-# - Edit README.md (add to Module Documentation)
-# - Edit infra-pi/dns/services.json (if exposing via DNS)
-
-# === STEP 7: Commit Main Repo Changes ===
-git add -A
-git commit -m "Add analytics-pi submodule and update documentation"
-git push
-```
-
-### 10.2 Daily Development Workflow
-
-Starting new feature development:
-
-```bash
-cd /path/to/pi/<project-name>
-
-# Ensure you're on develop
-git checkout develop
-git pull origin develop
-
-# Start a new feature
-git flow feature start user-authentication
-
-# ... make changes ...
-git add -A
-git commit -m "Add JWT-based user authentication"
-
-# Finish feature (merges to develop)
-git flow feature finish user-authentication
-
-# Push to remote
-git push origin develop
-```
-
-### 10.3 Release Workflow
-
-Creating a new release:
-
-```bash
-cd /path/to/pi/<project-name>
-
-# Start release (from develop)
-git checkout develop
-git flow release start 1.2.0
-
-# Update version in package.json
-# Update CHANGELOG.md
-# Run final tests
-npm test
-
-# Finish release (merges to master and develop, creates tag)
-git flow release finish 1.2.0
-
-# Push all branches and tags
-git push origin master
-git push origin develop
-git push --tags
-
-# Update main pi repo submodule reference
-cd /path/to/pi
-git add <project-name>
-git commit -m "Update <project-name> to v1.2.0"
-git push
-```
-
-### 10.4 Hotfix Workflow
-
-Emergency fix for production:
-
-```bash
-cd /path/to/pi/<project-name>
-
-# Start hotfix (from master)
-git flow hotfix start 1.2.1
-
-# ... make urgent fix ...
-git add -A
-git commit -m "Fix critical security vulnerability"
-
-# Finish hotfix (merges to master and develop)
-git flow hotfix finish 1.2.1
-
-# Push all branches and tags
-git push origin master
-git push origin develop
-git push --tags
-```
