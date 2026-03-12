@@ -222,14 +222,14 @@ async function buildUpdate() {
 	const args = process.argv.slice(2);
 	let bumpType = 'default';
 
+	if (args.includes('--major') || args.includes('major')) bumpType = 'major';
+	else if (args.includes('--minor') || args.includes('minor')) bumpType = 'minor';
+
 	const flags = args.filter((arg) => arg.startsWith('--'));
 	if (flags.length > 1) {
 		console.error('Error: Only one version bump flag is accepted.');
 		process.exit(1);
 	}
-
-	if (flags.includes('--major')) bumpType = 'major';
-	else if (flags.includes('--minor')) bumpType = 'minor';
 
 	// Update submodules first
 	for (const sub of submodules) {
