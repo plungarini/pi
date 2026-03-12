@@ -42,43 +42,88 @@ function askQuestion(query) {
 	);
 }
 
-async function update() {
-	console.log('Fetching latest from origin...');
-	runInherit('git fetch origin');
+const isForce = process.argv.includes('--force');
 
+/**
+ * Ensures the main repository is up to date.
+ */
+function updateMainRepo() {
 	const localHead = run('git rev-parse HEAD');
 	const originMaster = run('git rev-parse origin/master');
 
-	if (localHead === originMaster) {
+	if (localHead === originMaster && !isForce) {
 		console.log('The main repository is already up to date with origin/master.');
-		// Check if we are on master, if not, switch to it?
-		// Let's assume we want to be on master for the update script as it's for the end user.
 		const currentBranch = run('git rev-parse --abbrev-ref HEAD');
 		if (currentBranch !== 'master') {
 			console.log(`Currently on ${currentBranch}. Suggest switching to master for production deployments.`);
 		}
+		return false; // No update performed/needed
+	}
 
-		// Attempt to sync submodules just in case
-		console.log('Syncing submodules...');
-		runInherit('git submodule sync --recursive');
+	if (isForce) {
+		console.log('Force mode enabled. Hard resetting to origin/master...');
+		runInherit('git reset --hard origin/master');
+	} else {
+		console.log('Updates are available. Pulling latest master...');
+		const currentBranch = run('git rev-parse --abbrev-ref HEAD');
+		if (currentBranch !== 'master') {
+			runInherit('git checkout master');
+		}
+
+		try {
+			runInherit('git pull origin master');
+		} catch (err) {
+			console.error('\nPull failed. You might have local changes that conflict.');
+			console.error('Try running: npm run force-update');
+			throw err;
+		}
+	}
+	return true; // Update performed
+}
+
+/**
+ * Ensures submodules are correctly synced and updated.
+ */
+function updateSubmodules() {
+	console.log('Syncing submodules...');
+	
+	if (isForce) {
+		console.log('Cleaning and resetting submodules recursively...');
+		try {
+			// Sync URLs in case they changed
+			runInherit('git submodule sync --recursive');
+			// Reset any local changes and clean untracked files in submodules
+			runInherit('git submodule foreach --recursive "git reset --hard && git clean -fd"');
+		} catch (err) {
+			console.warn('Submodule cleanup completed with some warnings/errors.');
+		}
+	}
+
+	try {
 		runInherit('git submodule update --init --recursive --force');
-		return;
+	} catch (err) {
+		if (!isForce) {
+			console.error('\nSubmodule update failed.');
+			console.error('Try running: npm run force-update');
+		} else {
+			console.error('\nSubmodule update failed even in force mode.');
+		}
+		throw err;
 	}
+}
 
-	console.log('Updates are available. Pulling latest master...');
+async function update() {
+	console.log('Fetching latest from origin...');
+	runInherit('git fetch origin');
 
-	// Ensure we are on master
-	const currentBranch = run('git rev-parse --abbrev-ref HEAD');
-	if (currentBranch !== 'master') {
-		runInherit('git checkout master');
+	const updated = updateMainRepo();
+	
+	// Always sync submodules to ensure they match the current HEAD
+	updateSubmodules();
+
+	if (updated || isForce) {
+		console.log('Update complete!');
 	}
-
-	runInherit('git pull origin master');
-
-	console.log('Syncing submodules to match the new master...');
-	runInherit('git submodule update --init --recursive --force');
-
-	console.log('Update complete!');
 
 	const submodules = readSubmodules();
 	console.log('\n--- Post-Update Maintenance ---');
