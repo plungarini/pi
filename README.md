@@ -34,6 +34,8 @@ Each service in this repository is independent and contains its own detailed doc
 - [logger-pi](./logger-pi/README.md): Central logging and ingestion.
 - [reddit-pi](./reddit-pi/README.md): Intelligent Reddit recommendation engine.
 - [whatsapp-pi](./whatsapp-pi/README.md): WhatsApp API bridge and notification service.
+- [memory-pi](./memory-pi/README.md): Semantic memory storage using vector embeddings.
+- [medical-pi](./medical-pi/README.md): MedGemma-powered medical AI assistant with breathing profile.
 
 ## Running the Services
 

@@ -10,6 +10,11 @@
 			"domain": "memory.pi",
 			"note": "Smart multimodal memory service (RAG)",
 			"port": 3002
+		},
+		{
+			"domain": "medical.pi",
+			"note": "Medical AI Assistant with MedGemma",
+			"port": 3003
 		}
 	]
 }
