@@ -1,15 +1,15 @@
 [submodule "reddit-pi"]
-	path = reddit-pi
+	path = services/reddit-pi
 	url = git@github.com:plungarini/reddit-pi.git
 [submodule "logger-pi"]
-	path = logger-pi
+	path = services/logger-pi
 	url = git@github.com:plungarini/logger-pi.git
 [submodule "whatsapp-pi"]
-	path = whatsapp-pi
+	path = services/whatsapp-pi
 	url = git@github.com:plungarini/whatsapp-pi.git
 [submodule "memory-pi"]
-	path = memory-pi
+	path = services/memory-pi
 	url = git@github.com:plungarini/memory-pi.git
 [submodule "medical-pi"]
-	path = medical-pi
+	path = services/medical-pi
 	url = git@github.com:plungarini/medical-pi.git
