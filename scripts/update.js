@@ -85,28 +85,55 @@ function updateMainRepo() {
  * Ensures submodules are correctly synced and updated.
  */
 function updateSubmodules() {
-	console.log('Syncing submodules...');
+	const submodules = readSubmodules();
+	console.log('\n--- Syncing Submodules ---');
 
-	if (isForce) {
-		console.log('Cleaning and resetting submodules recursively...');
-		try {
-			// Sync URLs in case they changed
-			runInherit('git submodule sync --recursive');
-			// Reset any local changes and clean untracked files in submodules
-			runInherit('git submodule foreach --recursive "git reset --hard && git clean -fd"');
-		} catch (err) {
-			console.warn('Submodule cleanup completed with some warnings/errors.');
+	for (const sub of submodules) {
+		const subPath = path.resolve(process.cwd(), sub);
+		console.log(`\n> Analyzing ${sub}...`);
+
+		// 1. Repair metadata if broken (chicken-and-egg problem)
+		if (isForce && fs.existsSync(subPath)) {
+			try {
+				// Check if git actually recognizes this as a valid repo
+				run('git rev-parse --git-dir', subPath);
+			} catch (err) {
+				console.warn(`[REPAIR] Submodule ${sub} metadata link is broken. Attempting sync...`);
+				try {
+					// Use individual sync to fix the .git file pointer without deleting files
+					runInherit(`git submodule sync -- "${sub}"`);
+				} catch (syncErr) {
+					console.warn(`[WARNING] Failed to sync ${sub}. Metadata may still be invalid.`);
+				}
+			}
+		}
+
+		// 2. Fetch latest to resolve "Unable to find current revision"
+		if (fs.existsSync(subPath)) {
+			try {
+				console.log(`Fetching latest for ${sub}...`);
+				runInherit('git fetch origin', subPath);
+				
+				if (isForce) {
+					console.log(`Force resetting ${sub} to match tracked commit...`);
+					runInherit('git reset --hard', subPath);
+				}
+			} catch (err) {
+				console.warn(`[NOTICE] Could not fetch/reset in ${sub}. It might be uninitialized.`);
+			}
 		}
 	}
 
+	console.log('\nFinalizing submodule update from root...');
 	try {
+		// This now should have all the metadata it needs
 		runInherit('git submodule update --init --recursive --force');
 	} catch (err) {
-		if (isForce) {
-			console.error('\nSubmodule update failed even in force mode.');
-		} else {
+		if (!isForce) {
 			console.error('\nSubmodule update failed.');
-			console.error('Try running: npm run update-force');
+			console.error('Try running: npm run force-update');
+		} else {
+			console.error('\nSubmodule update failed even after individual recovery attempts.');
 		}
 		throw err;
 	}
