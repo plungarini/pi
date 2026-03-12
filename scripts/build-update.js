@@ -77,12 +77,23 @@ async function runInherit(cmd, cwd = process.cwd(), retries = 3) {
 	}
 }
 
-function getNextMinorVersion(packageJsonPath) {
+function getNextVersion(packageJsonPath, bumpType) {
 	const content = fs.readFileSync(packageJsonPath, 'utf8');
 	const pkg = JSON.parse(content);
 	const versionParts = pkg.version.split('.').map(Number);
-	versionParts[1] += 1;
-	versionParts[2] = 0;
+	
+	if (bumpType === 'major') {
+		versionParts[0] += 1;
+		versionParts[1] = 0;
+		versionParts[2] = 0;
+	} else if (bumpType === 'minor') {
+		versionParts[2] += 1;
+	} else {
+		// default behaviour
+		versionParts[1] += 1;
+		versionParts[2] = 0;
+	}
+	
 	return versionParts.join('.');
 }
 
@@ -109,7 +120,7 @@ function readSubmodules() {
 	return submodules;
 }
 
-async function processSubmodule(rootDir, sub) {
+async function processSubmodule(rootDir, sub, bumpType) {
 	const subPath = path.resolve(rootDir, sub);
 	console.log(`\n--- Processing Submodule: ${sub} ---`);
 
@@ -144,8 +155,8 @@ async function processSubmodule(rootDir, sub) {
 		return false;
 	}
 
-	const newVersion = getNextMinorVersion(pkgPath);
-	console.log(`New version will be ${newVersion} for ${sub}`);
+	const newVersion = getNextVersion(pkgPath, bumpType);
+	console.log(`New version (type: ${bumpType}) will be ${newVersion} for ${sub}`);
 
 	// Start release BEFORE changing files
 	// Handle case where release branch already exists (idempotency)
@@ -208,9 +219,21 @@ async function buildUpdate() {
 
 	let atLeastOneSubmoduleBumped = false;
 
+	const args = process.argv.slice(2);
+	let bumpType = 'default';
+
+	const flags = args.filter((arg) => arg.startsWith('--'));
+	if (flags.length > 1) {
+		console.error('Error: Only one version bump flag is accepted.');
+		process.exit(1);
+	}
+
+	if (flags.includes('--major')) bumpType = 'major';
+	else if (flags.includes('--minor')) bumpType = 'minor';
+
 	// Update submodules first
 	for (const sub of submodules) {
-		if (await processSubmodule(rootDir, sub)) {
+		if (await processSubmodule(rootDir, sub, bumpType)) {
 			atLeastOneSubmoduleBumped = true;
 		}
 	}
@@ -253,8 +276,8 @@ async function buildUpdate() {
 		console.log('\nNote: No new changes or bumped submodules detected, but proceeding with root release as requested.');
 	}
 
-	const newRootVersion = getNextMinorVersion(rootPkgPath);
-	console.log(`New root version will be ${newRootVersion}`);
+	const newRootVersion = getNextVersion(rootPkgPath, bumpType);
+	console.log(`New root version (type: ${bumpType}) will be ${newRootVersion}`);
 
 	// Handle case where release branch already exists (idempotency)
 	try {
