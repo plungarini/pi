@@ -15,6 +15,11 @@
 			"domain": "medical.pi",
 			"note": "Medical AI Assistant with MedGemma",
 			"port": 3003
+		},
+		{
+			"domain": "nesthub.pi",
+			"note": "Custom Google Nest Hub display",
+			"port": 3000
 		}
 	]
 }

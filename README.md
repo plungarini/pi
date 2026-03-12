@@ -36,6 +36,7 @@ Each service in this repository is independent and contains its own detailed doc
 - [whatsapp-pi](./whatsapp-pi/README.md): WhatsApp API bridge and notification service.
 - [memory-pi](./memory-pi/README.md): Semantic memory storage using vector embeddings.
 - [medical-pi](./medical-pi/README.md): MedGemma-powered medical AI assistant with breathing profile.
+- [nesthub-pi](./nesthub-pi/README.md): Custom Google Nest Hub display via Cast protocol.
 
 ## Running the Services
 

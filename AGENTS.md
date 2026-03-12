@@ -11,6 +11,7 @@ The Pi Projects is a monorepo-organized collection of independent microservices 
 - **WhatsApp Bridge** (`whatsapp-pi`): WhatsApp API for programmatic messaging
 - **Vector Memory** (`memory-pi`): Semantic memory storage using vector embeddings
 - **Medical AI Assistant** (`medical-pi`): MedGemma-powered medical chat with breathing profile
+- **Nest Hub Display** (`nesthub-pi`): Custom Google Nest Hub display with Cast protocol
 - **Infrastructure** (`infra-pi`): DNS and reverse proxy configuration for local network access
 
 The repository uses **Git Submodules** for independent service development with shared release management.
@@ -33,7 +34,8 @@ pi/
 ├── reddit-pi/               # Reddit recommendation engine (port 3000)
 ├── whatsapp-pi/             # WhatsApp API bridge (port 3001)
 ├── memory-pi/               # Vector memory microservice (port 3002)
-└── medical-pi/              # Medical AI assistant (port 3003)
+├── medical-pi/              # Medical AI assistant (port 3003)
+└── nesthub-pi/              # Nest Hub display service (port 3000)
 ```
 
 Each submodule is an independent Git repository linked via submodules.
@@ -83,6 +85,12 @@ Each submodule is an independent Git repository linked via submodules.
 - **better-sqlite3**: Medical profile and conversation storage
 - **React + Vite + TailwindCSS**: Chat UI with streaming messages
 - **Zod**: Profile diff validation
+
+**nesthub-pi**:
+- **Fastify**: Web framework
+- **castv2**: Google Cast protocol
+- **node-dns-sd**: mDNS discovery
+- **cloudflared**: Secure tunnels
 
 ## Build and Development Commands
 
@@ -141,6 +149,7 @@ npm run typecheck
 3. `whatsapp-pi` (port 3001) - If using WhatsApp notifications
 4. `reddit-pi` (port 3000) - Depends on logger and optionally WhatsApp
 5. `medical-pi` (port 3003) - Depends on logger, optionally memory-pi and whatsapp-pi
+6. `nesthub-pi` (port 3000) - Depends on logger and Cloudflare
 
 ## Code Organization
 
@@ -249,6 +258,7 @@ process.on('SIGTERM', shutdown);
 
 Services are accessible via friendly `.pi` domains on the local network:
 - `http://reddit.pi` → port 3000
+- `http://nesthub.pi` → port 3000
 - `http://memory.pi` → port 3002
 - `http://medical.pi` → port 3003
 
@@ -273,10 +283,10 @@ chmod +x install.sh apply.sh
 └─────────────┘
        ▲
        │
-┌──────┴──────┬─────────────┬─────────────┬─────────────┐
-│  reddit-pi  │ whatsapp-pi │  memory-pi  │ medical-pi  │
-│   :3000     │   :3001     │   :3002     │   :3003     │
-└─────────────┴─────────────┴─────────────┴─────────────┘
+┌──────┴──────┬─────────────┬─────────────┬─────────────┬─────────────┐
+│  reddit-pi  │ whatsapp-pi │  memory-pi  │ medical-pi  │ nesthub-pi  │
+│   :3000     │   :3001     │   :3002     │   :3003     │   :3000     │
+└─────────────┴─────────────┴─────────────┴─────────────┴─────────────┘
        │              │                       │
        └──────────────┘                       │
        (reddit-pi can notify via WhatsApp)   │
