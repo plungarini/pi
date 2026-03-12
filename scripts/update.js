@@ -86,7 +86,7 @@ function updateMainRepo() {
  */
 function updateSubmodules() {
 	console.log('Syncing submodules...');
-	
+
 	if (isForce) {
 		console.log('Cleaning and resetting submodules recursively...');
 		try {
@@ -102,11 +102,11 @@ function updateSubmodules() {
 	try {
 		runInherit('git submodule update --init --recursive --force');
 	} catch (err) {
-		if (!isForce) {
-			console.error('\nSubmodule update failed.');
-			console.error('Try running: npm run force-update');
-		} else {
+		if (isForce) {
 			console.error('\nSubmodule update failed even in force mode.');
+		} else {
+			console.error('\nSubmodule update failed.');
+			console.error('Try running: npm run update-force');
 		}
 		throw err;
 	}
@@ -117,7 +117,7 @@ async function update() {
 	runInherit('git fetch origin');
 
 	const updated = updateMainRepo();
-	
+
 	// Always sync submodules to ensure they match the current HEAD
 	updateSubmodules();
 
