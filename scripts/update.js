@@ -74,7 +74,7 @@ function updateMainRepo() {
 			runInherit('git pull origin master');
 		} catch (err) {
 			console.error('\nPull failed. You might have local changes that conflict.');
-			console.error('Try running: npm run force-update');
+			console.error('Try running: npm run update-force');
 			throw err;
 		}
 	}
@@ -117,7 +117,7 @@ function updateSubmodules() {
 			try {
 				console.log(`Fetching latest for ${sub}...`);
 				runInherit('git fetch origin', subPath);
-				
+
 				if (isForce) {
 					console.log(`Force resetting ${sub} to match tracked commit...`);
 					runInherit('git reset --hard', subPath);
@@ -140,7 +140,7 @@ function updateSubmodules() {
 	} catch (err) {
 		if (!isForce) {
 			console.error('\nSubmodule update failed.');
-			console.error('Try running: npm run force-update');
+			console.error('Try running: npm run update-force');
 		} else {
 			console.error('\nSubmodule update failed even after individual recovery attempts.');
 		}
