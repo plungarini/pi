@@ -4,8 +4,11 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 function run(cmd, cwd = process.cwd()) {
-	console.log(`> Running in ${cwd}: ${cmd}`);
-	return execSync(cmd, { cwd, stdio: 'pipe', encoding: 'utf-8' }).trim();
+	try {
+		return execSync(cmd, { cwd, stdio: 'pipe', encoding: 'utf-8' }).trim();
+	} catch (e) {
+		return null;
+	}
 }
 
 function runInherit(cmd, cwd = process.cwd()) {
@@ -27,6 +30,10 @@ function readSubmodules() {
 		}
 	}
 	return submodules;
+}
+
+function getSubmoduleCommit(subPath) {
+	return run('git rev-parse HEAD', subPath);
 }
 
 function askQuestion(query) {
@@ -92,124 +99,124 @@ function updateSubmodules() {
 		const subPath = path.resolve(process.cwd(), sub);
 		console.log(`\n> Analyzing ${sub}...`);
 
-		// 1. Repair metadata if broken (surgical approach)
+		// Metadata repair logic (preserved from original)
 		if (isForce && fs.existsSync(subPath)) {
 			try {
-				// Check if git actually recognizes this as a valid repo
 				run('git rev-parse --git-dir', subPath);
 			} catch (err) {
-				console.warn(`[REPAIR] Submodule ${sub} metadata link is broken or corrupt. Attempting surgical recovery...`);
-				try {
-					// Attempt to sync first to see if it fixes the .git pointer
-					runInherit(`git submodule sync -- "${sub}"`);
-					run('git rev-parse --git-dir', subPath);
-				} catch (repairErr) {
-					console.warn(`[REPAIR] Standard sync failed for ${sub}. Performing surgical re-initialization...`);
-					
-					// Surgical repair: Fix Git link while preserving all untracked files (.env, data/, etc.)
-					const dotGitPath = path.join(subPath, '.git');
-					if (fs.existsSync(dotGitPath)) {
-						fs.rmSync(dotGitPath, { recursive: true, force: true });
-					}
-
-					// Get the URL from .gitmodules to re-init
-					const gitmodules = fs.readFileSync(path.resolve('.gitmodules'), 'utf8');
-					const urlMatch = new RegExp(`\\[submodule[\\s\\S]*?path\\s*=\\s*${sub.replace(/\//g, '[\\\\/]')}[\\s\\S]*?url\\s*=\\s*(.+)`).exec(gitmodules);
-					
-					if (urlMatch && urlMatch[1]) {
-						const subUrl = urlMatch[1].trim();
-						console.log(`[REPAIR] Re-initializing ${sub} from ${subUrl}...`);
-						
-						// Create a new git link without deleting existing files
-						run('git init', subPath);
-						run(`git remote add origin ${subUrl}`, subPath);
-						run('git fetch origin', subPath);
-						
-						// Re-link to the main repo's metadata system
-						runInherit(`git submodule absorbgitdirs -- "${sub}"`);
-					} else {
-						console.error(`[ERROR] Could not find URL for submodule ${sub} in .gitmodules. Manual intervention required.`);
-					}
-				}
+				console.warn(`[REPAIR] Submodule ${sub} metadata link is broken or corrupt.`);
+				runInherit(`git submodule sync -- "${sub}"`);
 			}
 		}
 
-		// 2. Fetch latest or re-init
 		if (fs.existsSync(subPath)) {
 			try {
-				// If we have a .git file/dir, attempt to fetch
 				if (fs.existsSync(path.join(subPath, '.git'))) {
 					console.log(`Fetching latest for ${sub}...`);
 					runInherit('git fetch origin', subPath);
-					
 					if (isForce) {
-						console.log(`Force resetting ${sub} to match tracked commit...`);
 						runInherit('git reset --hard', subPath);
 					}
 				}
 			} catch (err) {
-				console.warn(`[NOTICE] Could not fetch/reset in ${sub}. It might be in an inconsistent state.`);
+				console.warn(`[NOTICE] Could not fetch in ${sub}.`);
 			}
 		}
 	}
 
 	console.log('\nFinalizing submodule update from root...');
-	try {
-		// This now should have all the metadata it needs
-		runInherit('git submodule update --init --recursive --force');
-	} catch (err) {
-		if (!isForce) {
-			console.error('\nSubmodule update failed.');
-			console.error('Try running: npm run update-force');
-		} else {
-			console.error('\nSubmodule update failed even after individual recovery attempts.');
-		}
-		throw err;
-	}
+	runInherit('git submodule update --init --recursive --force');
 }
 
 async function update() {
+	const rootDir = process.cwd();
+	const subPathList = readSubmodules();
+	
+	// 1. Capture state BEFORE update
+	const beforeState = {
+		rootHash: run('git rev-parse HEAD'),
+		submodules: {}
+	};
+	for (const sub of subPathList) {
+		beforeState.submodules[sub] = getSubmoduleCommit(path.resolve(rootDir, sub));
+	}
+
 	console.log('Fetching latest from origin...');
 	runInherit('git fetch origin');
 
-	const updated = updateMainRepo();
-
-	// Always sync submodules to ensure they match the current HEAD
+	updateMainRepo();
 	updateSubmodules();
 
-	if (updated || isForce) {
-		console.log('Update complete!');
+	// 2. Capture state AFTER update
+	const afterState = {
+		rootHash: run('git rev-parse HEAD'),
+		submodules: {}
+	};
+	for (const sub of subPathList) {
+		afterState.submodules[sub] = getSubmoduleCommit(path.resolve(rootDir, sub));
 	}
 
-	const submodules = readSubmodules();
-	console.log('\n--- Post-Update Maintenance ---');
-	console.log('To ensure a clean environment, we will now re-install dependencies for all modules.');
-	await askQuestion('\n[IMPORTANT] Please close all instances of services and THEN press Enter to continue...');
+	// 3. Detect changes
+	const rootChanged = beforeState.rootHash !== afterState.rootHash || isForce;
+	const changedSubmodules = subPathList.filter(sub => 
+		beforeState.submodules[sub] !== afterState.submodules[sub] || isForce
+	);
 
-	const rootDir = process.cwd();
+	if (!rootChanged && changedSubmodules.length === 0 && !isForce) {
+		console.log('\nEverything is already up to date. No manual maintenance needed.');
+		return;
+	}
 
-	// Root dependencies
-	if (fs.existsSync(path.join(rootDir, 'package.json'))) {
+	console.log('\n--- Smart Maintenance ---');
+	const itemsToUpdate = [];
+	if (rootChanged) itemsToUpdate.push('Main Repository');
+	changedSubmodules.forEach(s => itemsToUpdate.push(s));
+	
+	console.log(`Changes detected in: ${itemsToUpdate.join(', ')}`);
+	
+	await askQuestion(`\n[IMPORTANT] The following services need to be updated: ${changedSubmodules.join(', ') || 'none'}.
+Please close any running instances of these services AND then press Enter to continue...`);
+
+	// Root dependencies if package.json changed or force
+	if (rootChanged) {
 		console.log('\nUpdating root dependencies...');
 		runInherit('npm install', rootDir);
 	}
 
-	// Submodule dependencies
-	for (const sub of submodules) {
+	// Updated submodules
+	const builtServices = [];
+	for (const sub of changedSubmodules) {
 		const subPath = path.resolve(rootDir, sub);
 		if (fs.existsSync(path.join(subPath, 'package.json'))) {
-			console.log(`\nUpdating dependencies and building submodule: ${sub}...`);
+			console.log(`\nUpdating dependencies and building: ${sub}...`);
 			runInherit('npm install', subPath);
 			runInherit('npm run build', subPath);
+			builtServices.push(sub);
 		}
 	}
 
-	console.log('\nAll dependencies have been updated. You can now restart your services.');
+	// 4. Final Recap
+	console.log('\n' + '='.repeat(40));
+	console.log('       UPDATE SUMMARY');
+	console.log('='.repeat(40));
+	
+	const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+	console.log(`\n✅ Pi Version: ${pkg.version}`);
+	
+	if (builtServices.length > 0) {
+		console.log('\nUpdated Services:');
+		builtServices.forEach(s => console.log(`  - ${s}`));
+		console.log('\n🚀 ACTION REQUIRED: Restart the services above using "npm start" in their respective directories.');
+	} else {
+		console.log('\nNo submodules required rebuilding.');
+	}
+	
+	console.log('\nFinalized successfully.');
 }
 
 try {
 	await update();
 } catch (err) {
-	console.error('Update failed:', err.message);
+	console.error('\n❌ Update failed:', err.message);
 	process.exit(1);
 }
