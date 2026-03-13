@@ -12,7 +12,7 @@ Every new sub-project must act as an independent Git repository that is linked t
 
 ### 1.1 Directory Creation
 
-- Create a new directory with the service name (e.g., `medical-pi`) in the root of the `pi` repository (if not present)
+- Create a new directory with the service name (e.g., `medical-pi`) in the `pi/services` directory (if not present)
 - The directory name should be lowercase with hyphens (kebab-case)
 - Must match the pattern: `<service-name>-pi` for consistency
 
@@ -78,7 +78,7 @@ git submodule add git@github.com:<username>/<project-name>.git <project-name>
 cat .gitmodules
 # Should show:
 # [submodule "<project-name>"]
-#     path = <project-name>
+#     path = services/<project-name>
 #     url = git@github.com:<username>/<project-name>.git
 ```
 
@@ -179,9 +179,9 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 ---
 
-## 5. Raspberry Pi & Linux Compatibility
+## 5. Raspberry Pi / Linux & Windows Compatibility
 
-All microservices in the Pi ecosystem run on Raspberry Pi (ARM64/Linux). To ensure smooth deployment and operation:
+All microservices in the Pi ecosystem run on Raspberry Pi (ARM64/Linux) AND Windows (x64). To ensure smooth deployment and operation:
 
 ### 5.1 Runtime Requirements
 
@@ -222,7 +222,7 @@ npm start            # Start the service
 ### 5.4 File System Considerations
 
 - Use relative paths or configurable `BASE_STORAGE_PATH`
-- Default data directory: `/data/<project-name>` (configurable via `.env`)
+- Default data directory: `./data/<project-name>` (configurable via `.env`)
 - Create directories automatically on startup if they don't exist
 - Handle permission errors gracefully
 
@@ -262,7 +262,7 @@ npm start            # Start the service
 
 ### 6.3 Dependencies
 
-- Prefer native Node.js APIs (native `fetch`, `fs`, etc.)
+- Prefer native Node.js APIs (native `node:fetch`, `node:fs`, etc.)
 - Keep dependencies lightweight for Pi compatibility
 - Pin major versions to avoid breaking changes
 

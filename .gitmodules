@@ -13,3 +13,6 @@
 [submodule "medical-pi"]
 	path = services/medical-pi
 	url = git@github.com:plungarini/medical-pi.git
+[submodule "services/nesthub-pi"]
+	path = services/nesthub-pi
+	url = git@github.com:plungarini/nesthub-pi.git
