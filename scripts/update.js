@@ -98,17 +98,21 @@ function updateSubmodules() {
 				// Check if git actually recognizes this as a valid repo
 				run('git rev-parse --git-dir', subPath);
 			} catch (err) {
-				console.warn(`[REPAIR] Submodule ${sub} metadata link is broken. Attempting sync...`);
+				console.warn(`[REPAIR] Submodule ${sub} metadata link is broken or corrupt. Attempting recovery...`);
 				try {
-					// Use individual sync to fix the .git file pointer without deleting files
+					// Attempt to sync first
 					runInherit(`git submodule sync -- "${sub}"`);
-				} catch (syncErr) {
-					console.warn(`[WARNING] Failed to sync ${sub}. Metadata may still be invalid.`);
+					// Re-check
+					run('git rev-parse --git-dir', subPath);
+				} catch (repairErr) {
+					console.warn(`[REPAIR] Sync failed for ${sub}. Removing corrupt directory for clean re-init...`);
+					// Nuclear option: remove the directory if it's broken and sync didn't fix it
+					fs.rmSync(subPath, { recursive: true, force: true });
 				}
 			}
 		}
 
-		// 2. Fetch latest to resolve "Unable to find current revision"
+		// 2. Fetch latest or re-init
 		if (fs.existsSync(subPath)) {
 			try {
 				console.log(`Fetching latest for ${sub}...`);
@@ -119,7 +123,12 @@ function updateSubmodules() {
 					runInherit('git reset --hard', subPath);
 				}
 			} catch (err) {
-				console.warn(`[NOTICE] Could not fetch/reset in ${sub}. It might be uninitialized.`);
+				if (isForce) {
+					console.warn(`[REPAIR] Fetch failed for ${sub}. Removing potentially corrupt directory...`);
+					fs.rmSync(subPath, { recursive: true, force: true });
+				} else {
+					console.warn(`[NOTICE] Could not fetch/reset in ${sub}. It might be uninitialized.`);
+				}
 			}
 		}
 	}
