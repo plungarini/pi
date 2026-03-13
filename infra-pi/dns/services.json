@@ -19,7 +19,7 @@
 		{
 			"domain": "nesthub.pi",
 			"note": "Custom Google Nest Hub display",
-			"port": 3000
+			"port": 3004
 		}
 	]
 }

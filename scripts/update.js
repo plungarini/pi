@@ -74,7 +74,7 @@ function updateMainRepo() {
 			runInherit('git pull origin master');
 		} catch (err) {
 			console.error('\nPull failed. You might have local changes that conflict.');
-			console.error('Try running: npm run force-update');
+			console.error('Try running: npm run update-force');
 			throw err;
 		}
 	}
@@ -92,34 +92,63 @@ function updateSubmodules() {
 		const subPath = path.resolve(process.cwd(), sub);
 		console.log(`\n> Analyzing ${sub}...`);
 
-		// 1. Repair metadata if broken (chicken-and-egg problem)
+		// 1. Repair metadata if broken (surgical approach)
 		if (isForce && fs.existsSync(subPath)) {
 			try {
 				// Check if git actually recognizes this as a valid repo
 				run('git rev-parse --git-dir', subPath);
 			} catch (err) {
-				console.warn(`[REPAIR] Submodule ${sub} metadata link is broken. Attempting sync...`);
+				console.warn(`[REPAIR] Submodule ${sub} metadata link is broken or corrupt. Attempting surgical recovery...`);
 				try {
-					// Use individual sync to fix the .git file pointer without deleting files
+					// Attempt to sync first to see if it fixes the .git pointer
 					runInherit(`git submodule sync -- "${sub}"`);
-				} catch (syncErr) {
-					console.warn(`[WARNING] Failed to sync ${sub}. Metadata may still be invalid.`);
+					run('git rev-parse --git-dir', subPath);
+				} catch (repairErr) {
+					console.warn(`[REPAIR] Standard sync failed for ${sub}. Performing surgical re-initialization...`);
+					
+					// Surgical repair: Fix Git link while preserving all untracked files (.env, data/, etc.)
+					const dotGitPath = path.join(subPath, '.git');
+					if (fs.existsSync(dotGitPath)) {
+						fs.rmSync(dotGitPath, { recursive: true, force: true });
+					}
+
+					// Get the URL from .gitmodules to re-init
+					const gitmodules = fs.readFileSync(path.resolve('.gitmodules'), 'utf8');
+					const urlMatch = new RegExp(`\\[submodule[\\s\\S]*?path\\s*=\\s*${sub.replace(/\//g, '[\\\\/]')}[\\s\\S]*?url\\s*=\\s*(.+)`).exec(gitmodules);
+					
+					if (urlMatch && urlMatch[1]) {
+						const subUrl = urlMatch[1].trim();
+						console.log(`[REPAIR] Re-initializing ${sub} from ${subUrl}...`);
+						
+						// Create a new git link without deleting existing files
+						run('git init', subPath);
+						run(`git remote add origin ${subUrl}`, subPath);
+						run('git fetch origin', subPath);
+						
+						// Re-link to the main repo's metadata system
+						runInherit(`git submodule absorbgitdirs -- "${sub}"`);
+					} else {
+						console.error(`[ERROR] Could not find URL for submodule ${sub} in .gitmodules. Manual intervention required.`);
+					}
 				}
 			}
 		}
 
-		// 2. Fetch latest to resolve "Unable to find current revision"
+		// 2. Fetch latest or re-init
 		if (fs.existsSync(subPath)) {
 			try {
-				console.log(`Fetching latest for ${sub}...`);
-				runInherit('git fetch origin', subPath);
-				
-				if (isForce) {
-					console.log(`Force resetting ${sub} to match tracked commit...`);
-					runInherit('git reset --hard', subPath);
+				// If we have a .git file/dir, attempt to fetch
+				if (fs.existsSync(path.join(subPath, '.git'))) {
+					console.log(`Fetching latest for ${sub}...`);
+					runInherit('git fetch origin', subPath);
+					
+					if (isForce) {
+						console.log(`Force resetting ${sub} to match tracked commit...`);
+						runInherit('git reset --hard', subPath);
+					}
 				}
 			} catch (err) {
-				console.warn(`[NOTICE] Could not fetch/reset in ${sub}. It might be uninitialized.`);
+				console.warn(`[NOTICE] Could not fetch/reset in ${sub}. It might be in an inconsistent state.`);
 			}
 		}
 	}
@@ -131,7 +160,7 @@ function updateSubmodules() {
 	} catch (err) {
 		if (!isForce) {
 			console.error('\nSubmodule update failed.');
-			console.error('Try running: npm run force-update');
+			console.error('Try running: npm run update-force');
 		} else {
 			console.error('\nSubmodule update failed even after individual recovery attempts.');
 		}
