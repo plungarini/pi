@@ -131,11 +131,11 @@ function updateSubmodules() {
 async function update() {
 	const rootDir = process.cwd();
 	const subPathList = readSubmodules();
-	
+
 	// 1. Capture state BEFORE update
 	const beforeState = {
 		rootHash: run('git rev-parse HEAD'),
-		submodules: {}
+		submodules: {},
 	};
 	for (const sub of subPathList) {
 		beforeState.submodules[sub] = getSubmoduleCommit(path.resolve(rootDir, sub));
@@ -150,7 +150,7 @@ async function update() {
 	// 2. Capture state AFTER update
 	const afterState = {
 		rootHash: run('git rev-parse HEAD'),
-		submodules: {}
+		submodules: {},
 	};
 	for (const sub of subPathList) {
 		afterState.submodules[sub] = getSubmoduleCommit(path.resolve(rootDir, sub));
@@ -158,8 +158,8 @@ async function update() {
 
 	// 3. Detect changes
 	const rootChanged = beforeState.rootHash !== afterState.rootHash || isForce;
-	const changedSubmodules = subPathList.filter(sub => 
-		beforeState.submodules[sub] !== afterState.submodules[sub] || isForce
+	const changedSubmodules = subPathList.filter(
+		(sub) => beforeState.submodules[sub] !== afterState.submodules[sub] || isForce,
 	);
 
 	if (!rootChanged && changedSubmodules.length === 0 && !isForce) {
@@ -170,12 +170,13 @@ async function update() {
 	console.log('\n--- Smart Maintenance ---');
 	const itemsToUpdate = [];
 	if (rootChanged) itemsToUpdate.push('Main Repository');
-	changedSubmodules.forEach(s => itemsToUpdate.push(s));
-	
+	changedSubmodules.forEach((s) => itemsToUpdate.push(s));
+
 	console.log(`Changes detected in: ${itemsToUpdate.join(', ')}`);
-	
-	await askQuestion(`\n[IMPORTANT] The following services need to be updated: ${changedSubmodules.join(', ') || 'none'}.
-Please close any running instances of these services AND then press Enter to continue...`);
+
+	await askQuestion(
+		`\n[IMPORTANT] The following services need to be updated: ${changedSubmodules.join(', ') || 'none'}.\n\nPlease close any running instances of these services AND then press Enter to continue...`,
+	);
 
 	// Root dependencies if package.json changed or force
 	if (rootChanged) {
@@ -199,18 +200,18 @@ Please close any running instances of these services AND then press Enter to con
 	console.log('\n' + '='.repeat(40));
 	console.log('       UPDATE SUMMARY');
 	console.log('='.repeat(40));
-	
+
 	const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 	console.log(`\n✅ Pi Version: ${pkg.version}`);
-	
+
 	if (builtServices.length > 0) {
 		console.log('\nUpdated Services:');
-		builtServices.forEach(s => console.log(`  - ${s}`));
+		builtServices.forEach((s) => console.log(`  - ${s}`));
 		console.log('\n🚀 ACTION REQUIRED: Restart the services above using "npm start" in their respective directories.');
 	} else {
 		console.log('\nNo submodules required rebuilding.');
 	}
-	
+
 	console.log('\nFinalized successfully.');
 }
 
