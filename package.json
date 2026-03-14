@@ -1,11 +1,11 @@
 {
-  "description": "Pi main configuration and scripts",
-  "name": "pi",
-  "scripts": {
-    "build-update": "node scripts/build-update.js",
-    "update": "node scripts/update.js",
-    "update-force": "node scripts/update.js --force"
-  },
-  "type": "module",
-  "version": "2.3.15"
+	"description": "Pi main configuration and scripts",
+	"name": "pi",
+	"scripts": {
+		"build-update": "node scripts/build-update.js",
+		"update": "node scripts/update.js",
+		"update-force": "node scripts/update.js --force"
+	},
+	"type": "module",
+	"version": "2.4.0"
 }
