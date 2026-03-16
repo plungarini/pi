@@ -96,10 +96,10 @@ async function getNextVersion(cwd, packageJsonRelativeToCwd, bumpType) {
 
 	// Try to get version from master to compare
 	try {
-		const masterPkgContent = execSync(`git show master:${packageJsonRelativeToCwd}`, { 
-			cwd, 
+		const masterPkgContent = execSync(`git show master:${packageJsonRelativeToCwd}`, {
+			cwd,
 			encoding: 'utf-8',
-			stdio: ['ignore', 'pipe', 'ignore'] 
+			stdio: ['ignore', 'pipe', 'ignore'],
 		});
 		const masterPkg = JSON.parse(masterPkgContent);
 		if (compareVersions(masterPkg.version, baseVersion) > 0) {
@@ -111,19 +111,21 @@ async function getNextVersion(cwd, packageJsonRelativeToCwd, bumpType) {
 	}
 
 	const versionParts = baseVersion.split('.').map(Number);
-	
+
 	if (bumpType === 'major') {
+		// USER: "major" tag. It should update the first digit and reset after digits.
 		versionParts[0] += 1;
 		versionParts[1] = 0;
 		versionParts[2] = 0;
 	} else if (bumpType === 'minor') {
+		// USER: "minor" tag. It should update the last digit.
 		versionParts[2] += 1;
 	} else {
-		// default behaviour
+		// USER: no tag. It should update the middle digit and reset after digits.
 		versionParts[1] += 1;
 		versionParts[2] = 0;
 	}
-	
+
 	const nextVersion = versionParts.join('.');
 	const indent = detectIndentation(content);
 	return { nextVersion, baseVersion, localVersion, indent };
@@ -142,20 +144,26 @@ function detectIndentation(content) {
 
 async function ensureNoOtherReleaseBranch(cwd, targetVersion) {
 	const branchesOutput = await run('git branch', cwd);
-	const branches = branchesOutput.split('\n').map(b => b.replace('*', '').trim());
-	const releaseBranches = branches.filter(b => b.startsWith('release/'));
-	
+	const branches = branchesOutput.split('\n').map((b) => b.replace('*', '').trim());
+	const releaseBranches = branches.filter((b) => b.startsWith('release/'));
+
 	for (const branch of releaseBranches) {
 		const version = branch.replace('release/', '');
 		if (version !== targetVersion) {
 			console.log(`[FLOW] Found stale release branch: ${branch} in ${cwd}. Removing it...`);
-			
+
 			// If we are on the branch, switch to develop first
-			const currentBranch = branchesOutput.includes('*') ? branchesOutput.split('\n').find(l => l.startsWith('*')).replace('*', '').trim() : '';
+			const currentBranch = branchesOutput.includes('*')
+				? branchesOutput
+						.split('\n')
+						.find((l) => l.startsWith('*'))
+						.replace('*', '')
+						.trim()
+				: '';
 			if (currentBranch === branch) {
 				await runInherit('git checkout develop', cwd);
 			}
-			
+
 			await runInherit(`git branch -D ${branch}`, cwd);
 		}
 	}
@@ -222,10 +230,15 @@ async function processSubmodule(rootDir, sub, bumpType) {
 	const { nextVersion, baseVersion, localVersion, indent } = await getNextVersion(subPath, 'package.json', bumpType);
 
 	if (compareVersions(baseVersion, localVersion) > 0) {
-		console.log(`[SYNC] Submodule ${sub} local version (${localVersion}) is behind master (${baseVersion}). Syncing develop...`);
+		console.log(
+			`[SYNC] Submodule ${sub} local version (${localVersion}) is behind master (${baseVersion}). Syncing develop...`,
+		);
 		writeVersion(pkgPath, baseVersion, indent);
 		await runInherit(`git add package.json`, subPath);
-		await runInherit(`git commit -m "chore: sync package.json version and formatting with master (${baseVersion})"`, subPath);
+		await runInherit(
+			`git commit -m "chore: sync package.json version and formatting with master (${baseVersion})"`,
+			subPath,
+		);
 	} else {
 		// Even if versions match, check for formatting differences
 		try {
@@ -290,28 +303,29 @@ async function processSubmodule(rootDir, sub, bumpType) {
 		} catch (e) {
 			console.error(`Failed to finish release ${nextVersion} for ${sub}. Attempting auto-resolution...`);
 			try {
-				// 1. Resolve conflict by favoring release branch version
-				await runInherit('git checkout --ours package.json', subPath);
+				// 1. Resolve conflict by favoring release branch version (theirs)
+				console.log(`[RESOLVE] Picking version from release branch (theirs) for ${sub}...`);
+				await runInherit('git checkout --theirs package.json', subPath);
 				await runInherit('git add package.json', subPath);
 				// Check if there are changes to commit
 				const status = await run('git status --short', subPath);
 				if (status) {
 					await runInherit('git commit --no-edit', subPath);
 				}
-				
+
 				// 2. Create the tag
 				console.log(`[FLOW] Creating tag ${nextVersion} manually...`);
 				await runInherit(`git tag -a ${nextVersion} -m "Release ${nextVersion}"`, subPath);
-				
+
 				// 3. Sync back to develop
 				console.log(`[FLOW] Syncing changes back to develop...`);
 				await runInherit('git checkout develop', subPath);
 				await runInherit(`git merge master`, subPath);
-				
+
 				// 4. Cleanup
 				console.log(`[FLOW] Removing local release branch release/${nextVersion}...`);
 				await runInherit(`git branch -d release/${nextVersion}`, subPath);
-				
+
 				console.log(`[RESOLVED] Release ${nextVersion} for ${sub} finalized automatically.`);
 			} catch (resolveErr) {
 				console.error(`[FATAL] Could not auto-resolve conflict for ${sub}. Manual intervention required.`);
@@ -393,13 +407,23 @@ async function buildUpdate() {
 		console.log('\nNote: No new changes or bumped submodules detected, but proceeding with root release as requested.');
 	}
 
-	const { nextVersion: rootNextVersion, baseVersion: rootBaseVersion, localVersion: rootLocalVersion, indent: rootIndent } = await getNextVersion(rootDir, 'package.json', bumpType);
+	const {
+		nextVersion: rootNextVersion,
+		baseVersion: rootBaseVersion,
+		localVersion: rootLocalVersion,
+		indent: rootIndent,
+	} = await getNextVersion(rootDir, 'package.json', bumpType);
 
 	if (compareVersions(rootBaseVersion, rootLocalVersion) > 0) {
-		console.log(`[SYNC] Main repository local version (${rootLocalVersion}) is behind master (${rootBaseVersion}). Syncing develop...`);
+		console.log(
+			`[SYNC] Main repository local version (${rootLocalVersion}) is behind master (${rootBaseVersion}). Syncing develop...`,
+		);
 		writeVersion(rootPkgPath, rootBaseVersion, rootIndent);
 		await runInherit(`git add package.json`, rootDir);
-		await runInherit(`git commit -m "chore: sync package.json version and formatting with master (${rootBaseVersion})"`, rootDir);
+		await runInherit(
+			`git commit -m "chore: sync package.json version and formatting with master (${rootBaseVersion})"`,
+			rootDir,
+		);
 	} else {
 		// Even if versions match, check for formatting differences
 		try {
@@ -461,27 +485,28 @@ async function buildUpdate() {
 		} catch (e) {
 			console.error(`Failed to finish root release ${rootNextVersion}. Attempting auto-resolution...`);
 			try {
-				// 1. Resolve conflict on master
-				await runInherit('git checkout --ours package.json', rootDir);
+				// 1. Resolve conflict on master (favor release branch version / --theirs)
+				console.log(`[RESOLVE] Picking version from release branch (theirs) for main repo...`);
+				await runInherit('git checkout --theirs package.json', rootDir);
 				await runInherit('git add package.json', rootDir);
 				const status = await run('git status --short', rootDir);
 				if (status) {
 					await runInherit('git commit --no-edit', rootDir);
 				}
-				
+
 				// 2. Create the tag
 				console.log(`[FLOW] Creating tag ${rootNextVersion} manually...`);
 				await runInherit(`git tag -a ${rootNextVersion} -m "Release ${rootNextVersion}"`, rootDir);
-				
+
 				// 3. Sync back to develop
 				console.log(`[FLOW] Syncing changes back to develop...`);
 				await runInherit('git checkout develop', rootDir);
 				await runInherit(`git merge master`, rootDir);
-				
+
 				// 4. Cleanup
 				console.log(`[FLOW] Removing local release branch release/${rootNextVersion}...`);
 				await runInherit(`git branch -d release/${rootNextVersion}`, rootDir);
-				
+
 				console.log(`[RESOLVED] Root release ${rootNextVersion} finalized automatically.`);
 			} catch (resolveErr) {
 				console.error(`[FATAL] Could not auto-resolve root conflict. Manual intervention required.`);
