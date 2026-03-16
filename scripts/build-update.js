@@ -91,7 +91,8 @@ async function getNextVersion(cwd, packageJsonRelativeToCwd, bumpType) {
 	const fullPath = path.join(cwd, packageJsonRelativeToCwd);
 	const content = fs.readFileSync(fullPath, 'utf8');
 	const pkg = JSON.parse(content);
-	let baseVersion = pkg.version;
+	const localVersion = pkg.version;
+	let baseVersion = localVersion;
 
 	// Try to get version from master to compare
 	try {
@@ -102,7 +103,7 @@ async function getNextVersion(cwd, packageJsonRelativeToCwd, bumpType) {
 		});
 		const masterPkg = JSON.parse(masterPkgContent);
 		if (compareVersions(masterPkg.version, baseVersion) > 0) {
-			console.log(`[VERSION] Master version (${masterPkg.version}) is higher than local (${baseVersion}). Using master as base.`);
+			console.log(`[VERSION] Master version (${masterPkg.version}) is higher than local (${localVersion}).`);
 			baseVersion = masterPkg.version;
 		}
 	} catch (e) {
@@ -123,8 +124,29 @@ async function getNextVersion(cwd, packageJsonRelativeToCwd, bumpType) {
 		versionParts[2] = 0;
 	}
 	
-	const newVersion = versionParts.join('.');
-	return newVersion;
+	const nextVersion = versionParts.join('.');
+	return { nextVersion, baseVersion, localVersion };
+}
+
+async function ensureNoOtherReleaseBranch(cwd, targetVersion) {
+	const branchesOutput = await run('git branch', cwd);
+	const branches = branchesOutput.split('\n').map(b => b.replace('*', '').trim());
+	const releaseBranches = branches.filter(b => b.startsWith('release/'));
+	
+	for (const branch of releaseBranches) {
+		const version = branch.replace('release/', '');
+		if (version !== targetVersion) {
+			console.log(`[FLOW] Found stale release branch: ${branch} in ${cwd}. Removing it...`);
+			
+			// If we are on the branch, switch to develop first
+			const currentBranch = branchesOutput.includes('*') ? branchesOutput.split('\n').find(l => l.startsWith('*')).replace('*', '').trim() : '';
+			if (currentBranch === branch) {
+				await runInherit('git checkout develop', cwd);
+			}
+			
+			await runInherit(`git branch -D ${branch}`, cwd);
+		}
+	}
 }
 
 function writeVersion(packageJsonPath, newVersion) {
@@ -185,28 +207,39 @@ async function processSubmodule(rootDir, sub, bumpType) {
 		return false;
 	}
 
-	const newVersion = await getNextVersion(subPath, 'package.json', bumpType);
-	console.log(`New version (type: ${bumpType}) will be ${newVersion} for ${sub}`);
+	const { nextVersion, baseVersion, localVersion } = await getNextVersion(subPath, 'package.json', bumpType);
+
+	if (compareVersions(baseVersion, localVersion) > 0) {
+		console.log(`[SYNC] Submodule ${sub} local version (${localVersion}) is behind master (${baseVersion}). Syncing develop...`);
+		writeVersion(pkgPath, baseVersion);
+		await runInherit(`git add package.json`, subPath);
+		await runInherit(`git commit -m "chore: sync package.json version with master (${baseVersion})"`, subPath);
+	}
+
+	console.log(`New version (type: ${bumpType}) will be ${nextVersion} for ${sub}`);
+
+	// Ensure no other release branches exist
+	await ensureNoOtherReleaseBranch(subPath, nextVersion);
 
 	// Start release BEFORE changing files
 	// Handle case where release branch already exists (idempotency)
 	try {
-		await runInherit(`git flow release start ${newVersion}`, subPath);
+		await runInherit(`git flow release start ${nextVersion}`, subPath);
 	} catch (e) {
 		const branches = await run('git branch', subPath);
-		if (branches.includes(`release/${newVersion}`)) {
-			console.log(`Release branch release/${newVersion} already exists, switching to it.`);
-			await runInherit(`git checkout release/${newVersion}`, subPath);
+		if (branches.includes(`release/${nextVersion}`)) {
+			console.log(`Release branch release/${nextVersion} already exists, switching to it.`);
+			await runInherit(`git checkout release/${nextVersion}`, subPath);
 		} else {
 			throw e;
 		}
 	}
 
 	// Now bump and commit
-	writeVersion(pkgPath, newVersion);
+	writeVersion(pkgPath, nextVersion);
 	await runInherit(`git add package.json`, subPath);
 	try {
-		await runInherit(`git commit -m "Bump version to ${newVersion}"`, subPath);
+		await runInherit(`git commit -m "Bump version to ${nextVersion}"`, subPath);
 	} catch (e) {
 		console.log('Version bump commit failed (maybe already committed). Continuing.');
 	}
@@ -218,18 +251,18 @@ async function processSubmodule(rootDir, sub, bumpType) {
 		tags
 			.split('\n')
 			.map((t) => t.trim())
-			.includes(newVersion)
+			.includes(nextVersion)
 	) {
-		console.log(`Tag ${newVersion} already exists for ${sub}. Skipping finish.`);
+		console.log(`Tag ${nextVersion} already exists for ${sub}. Skipping finish.`);
 	} else {
 		try {
-			execSync(`git flow release finish -m "Release ${newVersion}" ${newVersion}`, {
+			execSync(`git flow release finish -m "Release ${nextVersion}" ${nextVersion}`, {
 				cwd: subPath,
 				env: { ...process.env, GIT_MERGE_AUTOEDIT: 'no', GIT_EDITOR: 'true' },
 				stdio: 'inherit',
 			});
 		} catch (e) {
-			console.error(`Failed to finish release ${newVersion} for ${sub}.`);
+			console.error(`Failed to finish release ${nextVersion} for ${sub}.`);
 			process.exit(1);
 		}
 	}
@@ -307,26 +340,37 @@ async function buildUpdate() {
 		console.log('\nNote: No new changes or bumped submodules detected, but proceeding with root release as requested.');
 	}
 
-	const newRootVersion = await getNextVersion(rootDir, 'package.json', bumpType);
-	console.log(`New root version (type: ${bumpType}) will be ${newRootVersion}`);
+	const { nextVersion: rootNextVersion, baseVersion: rootBaseVersion, localVersion: rootLocalVersion } = await getNextVersion(rootDir, 'package.json', bumpType);
+
+	if (compareVersions(rootBaseVersion, rootLocalVersion) > 0) {
+		console.log(`[SYNC] Main repository local version (${rootLocalVersion}) is behind master (${rootBaseVersion}). Syncing develop...`);
+		writeVersion(rootPkgPath, rootBaseVersion);
+		await runInherit(`git add package.json`, rootDir);
+		await runInherit(`git commit -m "chore: sync package.json version with master (${rootBaseVersion})"`, rootDir);
+	}
+
+	console.log(`New root version (type: ${bumpType}) will be ${rootNextVersion}`);
+
+	// Ensure no other release branches exist
+	await ensureNoOtherReleaseBranch(rootDir, rootNextVersion);
 
 	// Handle case where release branch already exists (idempotency)
 	try {
-		await runInherit(`git flow release start ${newRootVersion}`, rootDir);
+		await runInherit(`git flow release start ${rootNextVersion}`, rootDir);
 	} catch (e) {
 		const branches = await run('git branch', rootDir);
-		if (branches.includes(`release/${newRootVersion}`)) {
-			console.log(`Release branch release/${newRootVersion} already exists, switching to it.`);
-			await runInherit(`git checkout release/${newRootVersion}`, rootDir);
+		if (branches.includes(`release/${rootNextVersion}`)) {
+			console.log(`Release branch release/${rootNextVersion} already exists, switching to it.`);
+			await runInherit(`git checkout release/${rootNextVersion}`, rootDir);
 		} else {
 			throw e;
 		}
 	}
 
-	writeVersion(rootPkgPath, newRootVersion);
+	writeVersion(rootPkgPath, rootNextVersion);
 	await runInherit('git add package.json', rootDir);
 	try {
-		await runInherit(`git commit -m "Bump version to ${newRootVersion}"`, rootDir);
+		await runInherit(`git commit -m "Bump version to ${rootNextVersion}"`, rootDir);
 	} catch (e) {
 		console.log('Version bump commit failed (maybe already committed). Continuing.');
 	}
@@ -337,18 +381,18 @@ async function buildUpdate() {
 		rootTags
 			.split('\n')
 			.map((t) => t.trim())
-			.includes(newRootVersion)
+			.includes(rootNextVersion)
 	) {
-		console.log(`Tag ${newRootVersion} already exists for main repo. Skipping finish.`);
+		console.log(`Tag ${rootNextVersion} already exists for main repo. Skipping finish.`);
 	} else {
 		try {
-			execSync(`git flow release finish -m "Release ${newRootVersion}" ${newRootVersion}`, {
+			execSync(`git flow release finish -m "Release ${rootNextVersion}" ${rootNextVersion}`, {
 				cwd: rootDir,
 				env: { ...process.env, GIT_MERGE_AUTOEDIT: 'no', GIT_EDITOR: 'true' },
 				stdio: 'inherit',
 			});
 		} catch (e) {
-			console.error(`Failed to finish root release ${newRootVersion}.`);
+			console.error(`Failed to finish root release ${rootNextVersion}.`);
 			process.exit(1);
 		}
 	}
@@ -357,7 +401,7 @@ async function buildUpdate() {
 	await runInherit('git push origin master', rootDir);
 	await runInherit('git push --tags', rootDir);
 
-	console.log(`\nAll done! Released version ${newRootVersion} across all modules.`);
+	console.log(`\nAll done! Released version ${rootNextVersion} across all modules.`);
 }
 
 try {
