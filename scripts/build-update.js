@@ -128,6 +128,27 @@ async function getNextVersion(cwd, packageJsonRelativeToCwd, bumpType) {
 	return { nextVersion, baseVersion, localVersion };
 }
 
+async function ensureNoOtherReleaseBranch(cwd, targetVersion) {
+	const branchesOutput = await run('git branch', cwd);
+	const branches = branchesOutput.split('\n').map(b => b.replace('*', '').trim());
+	const releaseBranches = branches.filter(b => b.startsWith('release/'));
+	
+	for (const branch of releaseBranches) {
+		const version = branch.replace('release/', '');
+		if (version !== targetVersion) {
+			console.log(`[FLOW] Found stale release branch: ${branch} in ${cwd}. Removing it...`);
+			
+			// If we are on the branch, switch to develop first
+			const currentBranch = branchesOutput.includes('*') ? branchesOutput.split('\n').find(l => l.startsWith('*')).replace('*', '').trim() : '';
+			if (currentBranch === branch) {
+				await runInherit('git checkout develop', cwd);
+			}
+			
+			await runInherit(`git branch -D ${branch}`, cwd);
+		}
+	}
+}
+
 function writeVersion(packageJsonPath, newVersion) {
 	const content = fs.readFileSync(packageJsonPath, 'utf8');
 	const pkg = JSON.parse(content);
@@ -196,6 +217,9 @@ async function processSubmodule(rootDir, sub, bumpType) {
 	}
 
 	console.log(`New version (type: ${bumpType}) will be ${nextVersion} for ${sub}`);
+
+	// Ensure no other release branches exist
+	await ensureNoOtherReleaseBranch(subPath, nextVersion);
 
 	// Start release BEFORE changing files
 	// Handle case where release branch already exists (idempotency)
@@ -326,6 +350,9 @@ async function buildUpdate() {
 	}
 
 	console.log(`New root version (type: ${bumpType}) will be ${rootNextVersion}`);
+
+	// Ensure no other release branches exist
+	await ensureNoOtherReleaseBranch(rootDir, rootNextVersion);
 
 	// Handle case where release branch already exists (idempotency)
 	try {
