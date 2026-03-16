@@ -234,7 +234,11 @@ async function processSubmodule(rootDir, sub, bumpType) {
 			console.log(`[SYNC] Submodule ${sub} package.json formatting mismatch with master. Syncing formatting...`);
 			writeVersion(pkgPath, localVersion, indent); // Re-write with detected indent
 			await runInherit(`git add package.json`, subPath);
-			await runInherit(`git commit -m "chore: sync package.json formatting with master"`, subPath);
+			try {
+				await runInherit(`git commit -m "chore: sync package.json formatting with master"`, subPath);
+			} catch (commitErr) {
+				console.log(`[SYNC] No changes to commit for submodule ${sub} formatting.`);
+			}
 		}
 	}
 
@@ -404,7 +408,11 @@ async function buildUpdate() {
 			console.log(`[SYNC] Main repository package.json formatting mismatch with master. Syncing formatting...`);
 			writeVersion(rootPkgPath, rootLocalVersion, rootIndent);
 			await runInherit(`git add package.json`, rootDir);
-			await runInherit(`git commit -m "chore: sync package.json formatting with master"`, rootDir);
+			try {
+				await runInherit(`git commit -m "chore: sync package.json formatting with master"`, rootDir);
+			} catch (commitErr) {
+				console.log(`[SYNC] No changes to commit for main repository formatting.`);
+			}
 		}
 	}
 
