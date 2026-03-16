@@ -286,11 +286,29 @@ async function processSubmodule(rootDir, sub, bumpType) {
 		} catch (e) {
 			console.error(`Failed to finish release ${nextVersion} for ${sub}. Attempting auto-resolution...`);
 			try {
-				// Resolve conflict by favoring release branch version
+				// 1. Resolve conflict by favoring release branch version
 				await runInherit('git checkout --ours package.json', subPath);
 				await runInherit('git add package.json', subPath);
-				await runInherit('git commit --no-edit', subPath);
-				console.log(`[RESOLVED] Conflict in ${sub} resolved automatically.`);
+				// Check if there are changes to commit
+				const status = await run('git status --short', subPath);
+				if (status) {
+					await runInherit('git commit --no-edit', subPath);
+				}
+				
+				// 2. Create the tag
+				console.log(`[FLOW] Creating tag ${nextVersion} manually...`);
+				await runInherit(`git tag -a ${nextVersion} -m "Release ${nextVersion}"`, subPath);
+				
+				// 3. Sync back to develop
+				console.log(`[FLOW] Syncing changes back to develop...`);
+				await runInherit('git checkout develop', subPath);
+				await runInherit(`git merge master`, subPath);
+				
+				// 4. Cleanup
+				console.log(`[FLOW] Removing local release branch release/${nextVersion}...`);
+				await runInherit(`git branch -d release/${nextVersion}`, subPath);
+				
+				console.log(`[RESOLVED] Release ${nextVersion} for ${sub} finalized automatically.`);
 			} catch (resolveErr) {
 				console.error(`[FATAL] Could not auto-resolve conflict for ${sub}. Manual intervention required.`);
 				process.exit(1);
@@ -435,10 +453,28 @@ async function buildUpdate() {
 		} catch (e) {
 			console.error(`Failed to finish root release ${rootNextVersion}. Attempting auto-resolution...`);
 			try {
+				// 1. Resolve conflict on master
 				await runInherit('git checkout --ours package.json', rootDir);
 				await runInherit('git add package.json', rootDir);
-				await runInherit('git commit --no-edit', rootDir);
-				console.log(`[RESOLVED] Root conflict resolved automatically.`);
+				const status = await run('git status --short', rootDir);
+				if (status) {
+					await runInherit('git commit --no-edit', rootDir);
+				}
+				
+				// 2. Create the tag
+				console.log(`[FLOW] Creating tag ${rootNextVersion} manually...`);
+				await runInherit(`git tag -a ${rootNextVersion} -m "Release ${rootNextVersion}"`, rootDir);
+				
+				// 3. Sync back to develop
+				console.log(`[FLOW] Syncing changes back to develop...`);
+				await runInherit('git checkout develop', rootDir);
+				await runInherit(`git merge master`, rootDir);
+				
+				// 4. Cleanup
+				console.log(`[FLOW] Removing local release branch release/${rootNextVersion}...`);
+				await runInherit(`git branch -d release/${rootNextVersion}`, rootDir);
+				
+				console.log(`[RESOLVED] Root release ${rootNextVersion} finalized automatically.`);
 			} catch (resolveErr) {
 				console.error(`[FATAL] Could not auto-resolve root conflict. Manual intervention required.`);
 				process.exit(1);
