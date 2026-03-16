@@ -125,7 +125,19 @@ async function getNextVersion(cwd, packageJsonRelativeToCwd, bumpType) {
 	}
 	
 	const nextVersion = versionParts.join('.');
-	return { nextVersion, baseVersion, localVersion };
+	const indent = detectIndentation(content);
+	return { nextVersion, baseVersion, localVersion, indent };
+}
+
+function detectIndentation(content) {
+	const lines = content.split('\n');
+	for (const line of lines) {
+		const match = line.match(/^(\s+)"/);
+		if (match) {
+			return match[1];
+		}
+	}
+	return 2; // Default to 2 spaces
 }
 
 async function ensureNoOtherReleaseBranch(cwd, targetVersion) {
@@ -149,11 +161,11 @@ async function ensureNoOtherReleaseBranch(cwd, targetVersion) {
 	}
 }
 
-function writeVersion(packageJsonPath, newVersion) {
+function writeVersion(packageJsonPath, newVersion, indent = 2) {
 	const content = fs.readFileSync(packageJsonPath, 'utf8');
 	const pkg = JSON.parse(content);
 	pkg.version = newVersion;
-	fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + '\n');
+	fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, indent) + '\n');
 }
 
 function readSubmodules() {
@@ -207,13 +219,23 @@ async function processSubmodule(rootDir, sub, bumpType) {
 		return false;
 	}
 
-	const { nextVersion, baseVersion, localVersion } = await getNextVersion(subPath, 'package.json', bumpType);
+	const { nextVersion, baseVersion, localVersion, indent } = await getNextVersion(subPath, 'package.json', bumpType);
 
 	if (compareVersions(baseVersion, localVersion) > 0) {
 		console.log(`[SYNC] Submodule ${sub} local version (${localVersion}) is behind master (${baseVersion}). Syncing develop...`);
-		writeVersion(pkgPath, baseVersion);
+		writeVersion(pkgPath, baseVersion, indent);
 		await runInherit(`git add package.json`, subPath);
-		await runInherit(`git commit -m "chore: sync package.json version with master (${baseVersion})"`, subPath);
+		await runInherit(`git commit -m "chore: sync package.json version and formatting with master (${baseVersion})"`, subPath);
+	} else {
+		// Even if versions match, check for formatting differences
+		try {
+			await run(`git diff master..develop --quiet -- package.json`, subPath);
+		} catch (e) {
+			console.log(`[SYNC] Submodule ${sub} package.json formatting mismatch with master. Syncing formatting...`);
+			writeVersion(pkgPath, localVersion, indent); // Re-write with detected indent
+			await runInherit(`git add package.json`, subPath);
+			await runInherit(`git commit -m "chore: sync package.json formatting with master"`, subPath);
+		}
 	}
 
 	console.log(`New version (type: ${bumpType}) will be ${nextVersion} for ${sub}`);
@@ -236,7 +258,7 @@ async function processSubmodule(rootDir, sub, bumpType) {
 	}
 
 	// Now bump and commit
-	writeVersion(pkgPath, nextVersion);
+	writeVersion(pkgPath, nextVersion, indent);
 	await runInherit(`git add package.json`, subPath);
 	try {
 		await runInherit(`git commit -m "Bump version to ${nextVersion}"`, subPath);
@@ -262,8 +284,17 @@ async function processSubmodule(rootDir, sub, bumpType) {
 				stdio: 'inherit',
 			});
 		} catch (e) {
-			console.error(`Failed to finish release ${nextVersion} for ${sub}.`);
-			process.exit(1);
+			console.error(`Failed to finish release ${nextVersion} for ${sub}. Attempting auto-resolution...`);
+			try {
+				// Resolve conflict by favoring release branch version
+				await runInherit('git checkout --ours package.json', subPath);
+				await runInherit('git add package.json', subPath);
+				await runInherit('git commit --no-edit', subPath);
+				console.log(`[RESOLVED] Conflict in ${sub} resolved automatically.`);
+			} catch (resolveErr) {
+				console.error(`[FATAL] Could not auto-resolve conflict for ${sub}. Manual intervention required.`);
+				process.exit(1);
+			}
 		}
 	}
 
@@ -340,13 +371,23 @@ async function buildUpdate() {
 		console.log('\nNote: No new changes or bumped submodules detected, but proceeding with root release as requested.');
 	}
 
-	const { nextVersion: rootNextVersion, baseVersion: rootBaseVersion, localVersion: rootLocalVersion } = await getNextVersion(rootDir, 'package.json', bumpType);
+	const { nextVersion: rootNextVersion, baseVersion: rootBaseVersion, localVersion: rootLocalVersion, indent: rootIndent } = await getNextVersion(rootDir, 'package.json', bumpType);
 
 	if (compareVersions(rootBaseVersion, rootLocalVersion) > 0) {
 		console.log(`[SYNC] Main repository local version (${rootLocalVersion}) is behind master (${rootBaseVersion}). Syncing develop...`);
-		writeVersion(rootPkgPath, rootBaseVersion);
+		writeVersion(rootPkgPath, rootBaseVersion, rootIndent);
 		await runInherit(`git add package.json`, rootDir);
-		await runInherit(`git commit -m "chore: sync package.json version with master (${rootBaseVersion})"`, rootDir);
+		await runInherit(`git commit -m "chore: sync package.json version and formatting with master (${rootBaseVersion})"`, rootDir);
+	} else {
+		// Even if versions match, check for formatting differences
+		try {
+			await run(`git diff master..develop --quiet -- package.json`, rootDir);
+		} catch (e) {
+			console.log(`[SYNC] Main repository package.json formatting mismatch with master. Syncing formatting...`);
+			writeVersion(rootPkgPath, rootLocalVersion, rootIndent);
+			await runInherit(`git add package.json`, rootDir);
+			await runInherit(`git commit -m "chore: sync package.json formatting with master"`, rootDir);
+		}
 	}
 
 	console.log(`New root version (type: ${bumpType}) will be ${rootNextVersion}`);
@@ -367,7 +408,7 @@ async function buildUpdate() {
 		}
 	}
 
-	writeVersion(rootPkgPath, rootNextVersion);
+	writeVersion(rootPkgPath, rootNextVersion, rootIndent);
 	await runInherit('git add package.json', rootDir);
 	try {
 		await runInherit(`git commit -m "Bump version to ${rootNextVersion}"`, rootDir);
@@ -392,8 +433,16 @@ async function buildUpdate() {
 				stdio: 'inherit',
 			});
 		} catch (e) {
-			console.error(`Failed to finish root release ${rootNextVersion}.`);
-			process.exit(1);
+			console.error(`Failed to finish root release ${rootNextVersion}. Attempting auto-resolution...`);
+			try {
+				await runInherit('git checkout --ours package.json', rootDir);
+				await runInherit('git add package.json', rootDir);
+				await runInherit('git commit --no-edit', rootDir);
+				console.log(`[RESOLVED] Root conflict resolved automatically.`);
+			} catch (resolveErr) {
+				console.error(`[FATAL] Could not auto-resolve root conflict. Manual intervention required.`);
+				process.exit(1);
+			}
 		}
 	}
 
