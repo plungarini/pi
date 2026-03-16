@@ -77,10 +77,39 @@ async function runInherit(cmd, cwd = process.cwd(), retries = 3) {
 	}
 }
 
-function getNextVersion(packageJsonPath, bumpType) {
-	const content = fs.readFileSync(packageJsonPath, 'utf8');
+function compareVersions(v1, v2) {
+	const a = v1.split('.').map(Number);
+	const b = v2.split('.').map(Number);
+	for (let i = 0; i < 3; i++) {
+		if (a[i] > b[i]) return 1;
+		if (b[i] > a[i]) return -1;
+	}
+	return 0;
+}
+
+async function getNextVersion(cwd, packageJsonRelativeToCwd, bumpType) {
+	const fullPath = path.join(cwd, packageJsonRelativeToCwd);
+	const content = fs.readFileSync(fullPath, 'utf8');
 	const pkg = JSON.parse(content);
-	const versionParts = pkg.version.split('.').map(Number);
+	let baseVersion = pkg.version;
+
+	// Try to get version from master to compare
+	try {
+		const masterPkgContent = execSync(`git show master:${packageJsonRelativeToCwd}`, { 
+			cwd, 
+			encoding: 'utf-8',
+			stdio: ['ignore', 'pipe', 'ignore'] 
+		});
+		const masterPkg = JSON.parse(masterPkgContent);
+		if (compareVersions(masterPkg.version, baseVersion) > 0) {
+			console.log(`[VERSION] Master version (${masterPkg.version}) is higher than local (${baseVersion}). Using master as base.`);
+			baseVersion = masterPkg.version;
+		}
+	} catch (e) {
+		// master or package.json on master might not exist
+	}
+
+	const versionParts = baseVersion.split('.').map(Number);
 	
 	if (bumpType === 'major') {
 		versionParts[0] += 1;
@@ -94,7 +123,8 @@ function getNextVersion(packageJsonPath, bumpType) {
 		versionParts[2] = 0;
 	}
 	
-	return versionParts.join('.');
+	const newVersion = versionParts.join('.');
+	return newVersion;
 }
 
 function writeVersion(packageJsonPath, newVersion) {
@@ -155,7 +185,7 @@ async function processSubmodule(rootDir, sub, bumpType) {
 		return false;
 	}
 
-	const newVersion = getNextVersion(pkgPath, bumpType);
+	const newVersion = await getNextVersion(subPath, 'package.json', bumpType);
 	console.log(`New version (type: ${bumpType}) will be ${newVersion} for ${sub}`);
 
 	// Start release BEFORE changing files
@@ -246,6 +276,7 @@ async function buildUpdate() {
 	console.log(`\n--- Processing Main Repository ---`);
 	await runInherit('git checkout develop', rootDir);
 	await runInherit('git pull origin develop', rootDir);
+	await runInherit('git fetch origin master:master', rootDir);
 
 	try {
 		await run('git config --get gitflow.branch.master', rootDir);
@@ -276,7 +307,7 @@ async function buildUpdate() {
 		console.log('\nNote: No new changes or bumped submodules detected, but proceeding with root release as requested.');
 	}
 
-	const newRootVersion = getNextVersion(rootPkgPath, bumpType);
+	const newRootVersion = await getNextVersion(rootDir, 'package.json', bumpType);
 	console.log(`New root version (type: ${bumpType}) will be ${newRootVersion}`);
 
 	// Handle case where release branch already exists (idempotency)
