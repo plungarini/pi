@@ -52,8 +52,9 @@ async function run(cmd, cwd = process.cwd(), retries = 3) {
 	try {
 		return execSync(cmd, { cwd, stdio: 'pipe', encoding: 'utf-8' }).trim();
 	} catch (e) {
-		if (retries > 0 && e.message.includes('index.lock')) {
-			console.warn(`\n[RETRY] Git lock detected during execution, retrying...`);
+		const msg = e.message || '';
+		if (retries > 0 && (msg.includes('index.lock') || msg.includes('Unable to write index'))) {
+			console.warn(`\n[RETRY] Git lock or index error detected during execution, retrying...`);
 			await sleep(1000);
 			return run(cmd, cwd, retries - 1);
 		}
@@ -67,9 +68,10 @@ async function runInherit(cmd, cwd = process.cwd(), retries = 3) {
 	try {
 		execSync(cmd, { cwd, stdio: 'inherit' });
 	} catch (e) {
-		if (retries > 0 && (e.message.includes('index.lock') || e.message.includes('Command failed'))) {
+		const msg = e.message || '';
+		if (retries > 0 && (msg.includes('index.lock') || msg.includes('Unable to write index') || msg.includes('Command failed'))) {
 			// Some commands fail with non-zero exit code if lock exists
-			console.warn(`\n[RETRY] Command failed or lock detected, retrying...`);
+			console.warn(`\n[RETRY] Command failed or lock/index error detected, retrying...`);
 			await sleep(1000);
 			return runInherit(cmd, cwd, retries - 1);
 		}
@@ -198,7 +200,7 @@ async function processSubmodule(rootDir, sub, bumpType) {
 
 	// Ensure we're on develop and up-to-date
 	await runInherit('git checkout develop', subPath);
-	await runInherit('git pull origin develop', subPath);
+	await runInherit('git pull origin develop --rebase', subPath);
 	await runInherit('git fetch origin master:master', subPath);
 
 	const pkgPath = path.join(subPath, 'package.json');
@@ -314,8 +316,13 @@ async function processSubmodule(rootDir, sub, bumpType) {
 				}
 
 				// 2. Create the tag
-				console.log(`[FLOW] Creating tag ${nextVersion} manually...`);
-				await runInherit(`git tag -a ${nextVersion} -m "Release ${nextVersion}"`, subPath);
+				const currentTags = await run('git tag', subPath);
+				if (!currentTags.split('\n').map(t => t.trim()).includes(nextVersion)) {
+					console.log(`[FLOW] Creating tag ${nextVersion} manually...`);
+					await runInherit(`git tag -a ${nextVersion} -m "Release ${nextVersion}"`, subPath);
+				} else {
+					console.log(`[FLOW] Tag ${nextVersion} already exists for ${sub}. Skipping manual tag creation.`);
+				}
 
 				// 3. Sync back to develop
 				console.log(`[FLOW] Syncing changes back to develop...`);
@@ -375,7 +382,7 @@ async function buildUpdate() {
 	// Update main repository
 	console.log(`\n--- Processing Main Repository ---`);
 	await runInherit('git checkout develop', rootDir);
-	await runInherit('git pull origin develop', rootDir);
+	await runInherit('git pull origin develop --rebase', rootDir);
 	await runInherit('git fetch origin master:master', rootDir);
 
 	try {
@@ -495,8 +502,13 @@ async function buildUpdate() {
 				}
 
 				// 2. Create the tag
-				console.log(`[FLOW] Creating tag ${rootNextVersion} manually...`);
-				await runInherit(`git tag -a ${rootNextVersion} -m "Release ${rootNextVersion}"`, rootDir);
+				const currentRootTags = await run('git tag', rootDir);
+				if (!currentRootTags.split('\n').map(t => t.trim()).includes(rootNextVersion)) {
+					console.log(`[FLOW] Creating tag ${rootNextVersion} manually...`);
+					await runInherit(`git tag -a ${rootNextVersion} -m "Release ${rootNextVersion}"`, rootDir);
+				} else {
+					console.log(`[FLOW] Tag ${rootNextVersion} already exists for main repo. Skipping manual tag creation.`);
+				}
 
 				// 3. Sync back to develop
 				console.log(`[FLOW] Syncing changes back to develop...`);
