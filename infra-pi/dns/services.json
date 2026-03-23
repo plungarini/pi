@@ -20,6 +20,11 @@
 			"domain": "nesthub.pi",
 			"note": "Custom Google Nest Hub display",
 			"port": 3004
+		},
+		{
+			"domain": "even.pi",
+			"note": "Even Realities LLM proxy",
+			"port": 3005
 		}
 	]
 }
